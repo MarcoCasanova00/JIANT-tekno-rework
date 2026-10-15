@@ -4,8 +4,9 @@
  * Code + constants execute in place from XIP (app.bin offset 0 = 0x02000120).
  * RAMTEXT (JIANT 0.6.78: at the top of the pool, was 0x01C00000): .ram_text (code that must run while the flash is
  * busy: the flash driver), .c1_text (the second core's loop), .hot_text (core 0's hottest audio code). A call reaches
- * +-4 MiB (pi32v2 imm23 x 2, no long calls in this compiler): RAM code there reaches the whole XIP image (build.py
- * checks the margin); at 0x01C00000 it reached none of it.
+ * +-4 MiB (pi32v2 imm23 x 2, no long calls in this compiler): RAM code there reaches the whole XIP image's code (build.py
+ * checks the margin to _ecode: only code is called, the constants after it are read by address); at 0x01C00000 it
+ * reached none of it.
  * LOWBUF 0x01C00000..0x01C07000 (0.6.78; 0.6.82: 4 KiB more, the steps grew): main-loop buffers (undo, the project
  * scratch, the song section's stage), zeroed at boot; 0x01C07000..0x01C08000 stays for RAM-run debug.
  * RAM  : .data/.bss (96 KiB)
@@ -23,7 +24,7 @@ MEMORY
 }
 SECTIONS
 {
-    .text : { KEEP(*(.text.crt0)) *(.text*) *(.rodata*) . = ALIGN(4); _etext = .; } > XIP
+    .text : { KEEP(*(.text.crt0)) *(.text*) _ecode = .; *(.rodata*) . = ALIGN(4); _etext = .; } > XIP
     .ram_text : { _rt_start = .; KEEP(*(.ram_text*)) . = ALIGN(4); _rt_end = .; } > RAMTEXT AT > XIP
     _rt_load = LOADADDR(.ram_text);
     /* (JIANT 0.6.71) the second core's waiting loop (hal/fm1_multicore.h): in RAM, after the flash driver, inside the
