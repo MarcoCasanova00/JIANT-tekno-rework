@@ -75,6 +75,10 @@
 # NOISE (tests/noise_test.c): the engine (src/eng_noise.c): COLR's slope (white, pink, brown), the filter and the
 #                   register clock following the key, META periodic at the key, no DC, no clipping at the
 #                   corners, a note from silence the same twice, the cost per voice; demos in build/noise_demo/.
+# SYRINX (tests/syrinx_test.c): the engine (src/eng_syrinx.c): in tune over PRESS x TENSE (whistle .. pulses), notes
+#                   36..96, soft and hard, every preset's voice, each half on its own, after a chirp (3 cents); PRESS
+#                   walks whistle -> pulses, velocity is pressure, TENSE 127 stays a whistle; no DC, no clipping,
+#                   determinism, bounded under random knob jumps, the cost per voice; demos in build/syrinx_demo/.
 # DIGITAL -> FM6 (tests/fm4_test.c, built with FELUCCA_FM4=1): the retired four-operator engine against its conversion
 #                   (src/fm4_convert.c): routes and carriers per algorithm, the presets' PTCH, and the sound (pitch,
 #                   centroid, RMS envelope) of its presets and algorithms; demos in build/fm4_demo/. tests/digital_test.c
@@ -240,6 +244,9 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/noise_test" tests/noise_test.c -lm
     mkdir -p build/noise_demo
     run "NOISE: colour slopes, key-tracked filter and clock, META period, DC, clipping, retrigger, cost, demos" "$OUT/noise_test" build/noise_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/syrinx_test" tests/syrinx_test.c -lm
+    mkdir -p build/syrinx_demo
+    run "SYRINX: in tune (whistle .. pulses, both halves), PRESS's bifurcation, velocity, DC, clipping, determinism, cost, demos" "$OUT/syrinx_test" build/syrinx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/fm6_test" tests/fm6_test.c -lm
     mkdir -p build/fm6_demo
     run "FM6: algorithms, envelopes, retrigger, DC, clipping, macros, patch formats, voices, cost, demos" "$OUT/fm6_test" build/fm6_demo

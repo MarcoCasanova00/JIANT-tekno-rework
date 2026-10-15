@@ -22,7 +22,7 @@ typedef struct {
     uint8_t tw;                                         /* the spikes twist */
     uint8_t sh;                                         /* their sharpness (a power of the cosine) */
 } genome_t;
-static const genome_t GENOME[8] = {
+static const genome_t GENOME[9] = {
     {6, 18, 16, 3, 22, 0, 6},                           /* a radiolarian: a sun of thin rays */
     {3, 5, 14, 2, 26, 3, 2},                            /* an amoeba: its arms swirl */
     {4, 6, 10, 4, 18, 0, 1},                            /* a diatom: blunt */
@@ -31,11 +31,12 @@ static const genome_t GENOME[8] = {
     {2, 4, 16, 2, 30, 1, 3},                            /* a worm: long, two horns */
     {8, 12, 12, 6, 17, 0, 8},                           /* a pollen grain */
     {3, 7, 15, 3, 21, 4, 5},                            /* a hydra: curled tentacles */
+    {14, 10, 18, 2, 28, 1, 9},                          /* a feather: two vanes of fine barbs, stretched */
 };
 /* (JIANT 0.5) a species per engine: ANALOG the radiolarian, PHASE the swirling amoeba, LOFI the blunt diatom, VOICE the
  * hydra (a mouth of tentacles), WHEEL the ciliate (a fringe of pipes), NOISE the spore, FM6 the pollen grain (its
- * operators' geometry), the retired slots the worm */
-static const uint8_t EGEN[NENGINES] = {0, 5, 1, 2, 5, 7, 5, 3, 5, 5, 0, 4, 6, 5};
+ * operators' geometry), SYRINX the feather, the retired slots the worm */
+static const uint8_t EGEN[NENGINES] = {0, 5, 1, 2, 5, 7, 5, 3, 5, 5, 0, 4, 6, 5, 8};
 static const genome_t LANE_G_HOME = {12, 0, 10, 3, 18, 0, 6};   /* HOME: a DRUM-X track's being (spiky, a beat) */
 typedef struct {
     int32_t spikes, len, wob, lob, nuc, sep, fray, ripple;   /* len wob sep fray ripple 0..256 */

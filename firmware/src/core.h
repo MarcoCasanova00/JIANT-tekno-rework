@@ -17,7 +17,7 @@
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
                                   * by default; replaced by FM6, its sounds convert (fm4_convert.c) */
 #endif
-#define NENGINES 14              /* the stores' engine numbers 0..13 (engines.c ENGINES[], append-only) */
+#define NENGINES 15              /* the stores' engine numbers 0..14 (engines.c ENGINES[], append-only) */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
 #define NENG_SHOWN (NENGINES - !FELUCCA_FM4 - 5)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
                                                 * in the display order of engines.c ENGINE_ORDER (PHYS 9, and in
@@ -188,6 +188,7 @@ static void params_by_count(int16_t *out, const int16_t *in, uint32_t np, const 
 #define ENGI_ANALOG 0u           /* (JIANT 0.5: named for its FILTER page) */
 #define ENGI_PHYS 9u
 #define ENGI_DRUM 10u
+#define ENGI_SYRINX 14u          /* SYRINX: a bird's voice organ (eng_syrinx.c) */
 #define ENGI_GRAIN 8u
 #define ENGI_SLICE 13u
 #define ENGI_SAMPLE 4u

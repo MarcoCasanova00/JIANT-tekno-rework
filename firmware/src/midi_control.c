@@ -197,6 +197,7 @@ static const uint8_t MIDI_CC_ENG[NENGINES] = {
                                                        * TRIO CUT RES, WHEEL - */
     0x80, 0x30, 0x30, 0x34, 0x30,                     /* GRAIN TONE, PHYS BRIT, DRUM TONE, NOISE FREQ RES, FM6 MLVL */
     0x80,                                             /* SLICE TONE (retired: ANALOG's played) */
+    0x51,                                             /* SYRINX BEAK, PRESS */
 };
 static void __attribute__((noinline)) midi_cc_map(track_t *t, uint32_t cc, uint32_t value)
 {

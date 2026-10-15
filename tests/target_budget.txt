@@ -15,6 +15,7 @@ noise_render 256
 fm6_render 378
 fm6_op_run 72
 fm6_op_fb 26
+syrinx_render 1740
 dx_run 409
 dx_layer 105
 drum_side_add 30

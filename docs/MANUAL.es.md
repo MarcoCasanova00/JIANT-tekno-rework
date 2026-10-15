@@ -370,7 +370,7 @@ borra. (LFO + SELECT tira el LFO de la pista, con KEEP / CANCEL: ver los dados.)
 
 ## 4. Motores
 
-Ocho motores, todos de síntesis, sin samples. Cualquier motor puede ir en cualquier pista. Elegilos con **PRESETS**
+Nueve motores, todos de síntesis, sin samples. Cualquier motor puede ir en cualquier pista. Elegilos con **PRESETS**
 (una sola lista con todos los motores) o con KNOB 2 (ENG) en SAVE > PRESETS. También figuran las cuatro perillas de
 HOME de cada pista.
 
@@ -388,6 +388,7 @@ click; las notas siguen.
 | **VOICE** | VOWEL, VOWEL2, TALK, SHIFT | BUZZ, BREATH, Q, RAND | VOWEL, BUZZ, BREATH, TALK |
 | **WHEEL** | REG, SUB, BODY, TOP | PERC, CLICK, DRIVE, ROTOR | REG, PERC, DRIVE, ROTOR |
 | **NOISE** | MODE, COLOR, FREQ, PEAK | TRK, DENSE, DRIFT, CRUSH | FREQ, PEAK, COLOR, REL |
+| **SYRINX** | PRESS, TENSE, SWEEP, SYLL | BEAK, TRACH, DUET, BREATH | PRESS, TENSE, BEAK, TRACH |
 | **DRUM** (DRUM-X) | MORPH, TUNE, TONE, DECAY | NOISE, FM ENV, FOLD, DRIVE | MORPH, TUNE, TONE, DECAY |
 
 - **ANALOG**: dos osciladores. WAVE: SAW, SQR, TRI, SIN, PWM, SYNC, RING, SAW3. **INT** fija el intervalo del
@@ -417,6 +418,15 @@ click; las notas siguen.
 - **WHEEL**: un órgano de drawbars: registraciones (REG), percusión (PERC: OFF, 2ND, 3RD, 2SOFT, 3SOFT, 2SLOW,
   3SLOW), click de tecla, drive, ROTOR (OFF, SLOW, FAST).
 - **NOISE**: ruido coloreado y metálico. MODE: ANLG, DUST, LFSR, META (DUST es solo el crepitar: con DENS en 0 igual crepita suave). PEAK es su propia resonancia.
+- **SYRINX**: el órgano de la voz de un pájaro, según el modelo de siringe de Mindlin y Laje. **PRESS** (la presión del
+  aire) lleva el sonido de un silbido puro a un gruñido de pulsos; **TENSE** (la tensión) decide qué tan pronto llega el
+  gruñido (al 100 % sigue siendo silbido); una tecla más fuerte sopla más fuerte. **SWEEP** empieza cada nota con un
+  barrido de tono desde hasta 12 semitonos arriba (−) o abajo (+), **SYLL** convierte la nota en un trino (de 4 a 40
+  sílabas por segundo, cada una un barrido nuevo), **BEAK** abre el pico (de opaco a brillante), **TRACH** es el largo de
+  la tráquea (sus resonancias quedan fijas en cualquier nota, así suena el mismo pájaro en todo el teclado: corta
+  6 kHz, larga 200 Hz), **DUET** despierta la otra mitad de la siringe (primero unos cents desafinada: batidos; pasada la
+  mitad, un intervalo de 1 a 12 semitonos), **BREATH** suma el aire. Cuatro voces por pista; cada nota queda afinada sea
+  cual sea la presión.
 - **DRUM**: DRUM-X, ver [5](#5-drum-x).
 
 ### FILTER (todos los motores)

@@ -359,7 +359,7 @@ keep controlling the macros on every page) until you press LFO again. F3 rolls n
 
 ## 4. Engines
 
-Eight engines, all synthesis, no samples. Any engine can go on any track. Pick them with **PRESETS** (one list over
+Nine engines, all synthesis, no samples. Any engine can go on any track. Pick them with **PRESETS** (one list over
 every engine) or with KNOB 2 (ENG) on SAVE > PRESETS. Each track's four HOME knobs are listed too.
 
 **Smooth changes**: switching a track to another engine fades the old one out (about 12 ms) and what you are holding
@@ -375,6 +375,7 @@ every engine) or with KNOB 2 (ENG) on SAVE > PRESETS. Each track's four HOME kno
 | **VOICE** | VOWEL, VOWEL2, TALK, SHIFT | BUZZ, BREATH, Q, RAND | VOWEL, BUZZ, BREATH, TALK |
 | **WHEEL** | REG, SUB, BODY, TOP | PERC, CLICK, DRIVE, ROTOR | REG, PERC, DRIVE, ROTOR |
 | **NOISE** | MODE, COLOR, FREQ, PEAK | TRK, DENSE, DRIFT, CRUSH | FREQ, PEAK, COLOR, REL |
+| **SYRINX** | PRESS, TENSE, SWEEP, SYLL | BEAK, TRACH, DUET, BREATH | PRESS, TENSE, BEAK, TRACH |
 | **DRUM** (DRUM-X) | MORPH, TUNE, TONE, DECAY | NOISE, FM ENV, FOLD, DRIVE | MORPH, TUNE, TONE, DECAY |
 
 - **ANALOG**: two oscillators. WAVE: SAW, SQR, TRI, SIN, PWM, SYNC, RING, SAW3. **INT** sets oscillator 2's interval
@@ -402,6 +403,14 @@ every engine) or with KNOB 2 (ENG) on SAVE > PRESETS. Each track's four HOME kno
 - **WHEEL**: a drawbar organ: registrations (REG), percussion (PERC: OFF, 2ND, 3RD, 2SOFT, 3SOFT, 2SLOW, 3SLOW),
   key click, drive, ROTOR (OFF, SLOW, FAST).
 - **NOISE**: coloured and metallic noise. MODE: ANLG, DUST, LFSR, META (DUST is only the crackle: at DENS 0 it still crackles softly). PEAK is its own resonance.
+- **SYRINX**: a bird's voice organ, after the syrinx model of Mindlin and Laje. **PRESS** (the air pressure) takes the
+  sound from a pure whistle to a growl of pulses; **TENSE** (the tension) sets how soon the growl comes (at 100 % it
+  stays a whistle); a harder key presses harder. **SWEEP** starts each note with a chirp from up to 12 semitones above
+  (−) or below (+), **SYLL** turns the note into a trill (4–40 syllables a second, each one a new chirp), **BEAK** opens
+  the beak (dull to bright), **TRACH** is the trachea's length (its resonances stay put on every note, which gives the
+  same bird all over the keyboard: short 6 kHz, long 200 Hz), **DUET** wakes the syrinx's second half (first a few
+  cents off: beats; past the middle an interval of 1–12 semitones), **BREATH** adds the air. Four voices a track;
+  every note stays in tune whatever the pressure.
 - **DRUM**: DRUM-X, see [5](#5-drum-x).
 
 ### FILTER (every engine)

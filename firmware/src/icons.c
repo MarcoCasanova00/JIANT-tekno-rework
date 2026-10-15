@@ -157,6 +157,8 @@ static const icon_map_t ICON_MAP[] = {
     {"FREQ", ICON_CUTOFF}, {"TRK", ICON_KEYTRACK}, {"DRIFT", ICON_SWEEP},   /* NOISE (COLR, DENS, CRSH: above) */
     {"MOD", ICON_MOD}, {"RATIO", ICON_RATIO}, {"MEG", ICON_DECAY}, {"VMOD", ICON_ACCENT}, 
                                                        /* FM6 (ALG, FB: above) */
+    {"PRESS", ICON_DRIVE}, {"TENSE", ICON_TUNE}, {"SWEEP", ICON_SWEEP}, {"SYLL", ICON_RATE},
+    {"BEAK", ICON_MOUTH}, {"TRACH", ICON_SIZE}, {"DUET", ICON_DETUNE},  /* SYRINX (BREATH: above) */
     /* fixed columns drawn by ui_draw.c (STEP page, preset browser, SYSTEM) */
     {"NOTE", ICON_PITCH}, {"STEP", ICON_STEPS}, {"FLAG", ICON_ACCENT}, {"ACC", ICON_ACCENT}, {"LANE", ICON_DRUM}, {"HIT", ICON_GATE}, {"SLD", ICON_SLIDE}, {"USB", ICON_MIDI},
     {"TRACK", ICON_MIX},                  /* TRACKS page (LEVEL, LEN, PAN: above) */
@@ -244,6 +246,7 @@ static uint32_t engine_icon(const char *name)
         {"DRUM", ICON_DRUM},
         {"NOISE", ICON_NOISE},
         {"FM6", ICON_MOD},                    /* (symbol_modular: six operators patched; a glyph of its own wanted) */
+        {"SYRINX", ICON_SWEEP},               /* (a chirp: the sweep's glyph; VOICE has the mouth) */
     };
     uint32_t i;
     for (i = 0; i < sizeof M / sizeof M[0]; i++)

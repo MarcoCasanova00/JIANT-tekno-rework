@@ -145,7 +145,7 @@ back and the DRUM-X colony, exactly as the firmware draws them while a song play
   up whole).
 
 ### Engines
-Eight engines, all synthesis, no samples: **ANALOG, FM6, PHASE, LOFI, VOICE, WHEEL, NOISE and DRUM (DRUM-X)**.
+Nine engines, all synthesis, no samples: **ANALOG, FM6, PHASE, LOFI, VOICE, WHEEL, NOISE, SYRINX and DRUM (DRUM-X)**.
 - **ANALOG**: two oscillators with **INT** (an interval of ±24 semitones: fifths, octaves) and DTN; besides SAW, SQR,
   TRI, SIN and PWM it has **SYNC**, **RING** and **SAW3** (three saws). Its filter is per voice.
 - **FM6**: Dexed's engine (imports .syx), with its algorithms drawn. Fully editable on the device (from Felucca 1.5):
@@ -164,6 +164,9 @@ Eight engines, all synthesis, no samples: **ANALOG, FM6, PHASE, LOFI, VOICE, WHE
   repeats a short stretch of the formula: the noise becomes a tone tuned to the note. **FLOAT** is a floatbeat
   generator: 32 formulas of `t` made of sines (rhythm, melody and timbre at once), in the key played.
 - **VOICE** (formants, after klattsch), **WHEEL** (drawbar organ) and **NOISE** (coloured and metallic noise).
+- **SYRINX**: a bird's voice organ (the syrinx model of Mindlin and Laje). PRESS takes a pure whistle to a growl of
+  pulses, TENSE sets how soon; chirps (SWEEP), trills (SYLL), the beak, a trachea that keeps the same bird on every
+  note, the syrinx's two halves (DUET: beats or two voices) and breath. Every note in tune at any pressure.
 - **FILTER on every engine** (EDIT > FILTER): **TYPE** LP, HP, BP or **COMB** (a comb tuned to the note you're
   playing; CUT moves it ±32 semitones and RES is how much it rings), **CUT** and **RES**. On ANALOG it's its per-voice
   filter, with DRV; on LOFI it's per voice too (its CUT and RES are the ones on this page); on the others it's a filter
