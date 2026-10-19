@@ -154,8 +154,9 @@ CC="${CC:-cc} -O1 -Wall -Wno-unused-function"
 fail=0
 run() { echo "== $1"; shift; "$@" || fail=1; }
 
-$CC -o "$OUT/storage_test" tests/storage_test.c
-run "flash storage (A/B, torn writes)" "$OUT/storage_test"
+APP_END=$(python3 -c 'import sys; sys.path.insert(0, "tools"); import fm1pkg_make; print(fm1pkg_make.FLASH_SIZE)')
+$CC "-DFL_APP_END=$APP_END" -o "$OUT/storage_test" tests/storage_test.c
+run "flash storage (A/B, torn writes; no object in the app area)" "$OUT/storage_test"
 
 $CC -o "$OUT/upreset_test" tests/upreset_test.c
 run "user presets (UP_PUT parser, bank round trip, versions, PHYS DRUM and SAMPLE PERC -> DRUM, grid records, DIGITAL kept)" "$OUT/upreset_test"
@@ -199,7 +200,12 @@ python3 tools/fm1pkg_make.py "$OUT/old_app.bin" build/loader/ota.bin "$OUT/old.f
 $CC -o "$OUT/ldr_test" tests/ldr_test.c
 SLOT=$(python3 -c 'import sys; sys.path.insert(0, "tools"); import fm1pkg_make; print(fm1pkg_make.APP_SLOT)')
 run "update loader: other app -> this build" "$OUT/ldr_test" "$OUT/old.fwsc" build/felucca.fwsc "$SLOT"
-# (0.9.13) an app that fills the whole grown slot (the region then ends at 0x92FFE), with today's loader
+# (0.9.16) the app area to 0x97000: over a package of the earlier layout (flash.bin [0, 0x93000), 0.9.13..0.9.15), and
+# back (an earlier version from the installer's list, written by this loader: [0x93000, 0x97000) left as it was)
+python3 tools/fm1pkg_make.py "$OUT/old_app.bin" build/loader/ota.bin "$OUT/old13.fwsc" --layout 0.9.13 >/dev/null
+run "update loader: a 0.9.13..0.9.15 layout -> this build (app area to 0x97000)" "$OUT/ldr_test" "$OUT/old13.fwsc" build/felucca.fwsc "$SLOT"
+run "update loader: this build -> a 0.9.13..0.9.15 layout (app area to 0x93000)" "$OUT/ldr_test" build/felucca.fwsc "$OUT/old13.fwsc" 0x8EA90
+# (0.9.13) an app that fills the whole grown slot (0.9.16: the region then ends at 0x96FFE), with today's loader
 python3 -c 'import os, sys; a = open(sys.argv[1], "rb").read(); n = int(sys.argv[3]); open(sys.argv[2], "wb").write(a + os.urandom(n - len(a)))' \
     build/felucca.bin "$OUT/full_app.bin" "$SLOT"
 python3 tools/fm1pkg_make.py "$OUT/full_app.bin" build/loader/ota.bin "$OUT/full.fwsc" >/dev/null

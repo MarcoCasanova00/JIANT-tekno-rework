@@ -67,8 +67,8 @@ class FakeFM1:
     """a MIDI backend with one FM-1 on it"""
 
     def __init__(self, image, identity="FM-1_015", name="FM-1", unplug_after=None, after_write="FM-1_900",
-                 stall_after=None, bad_addr=None, loader_name="Felucca Update", after_name="Felucca"):
-        self.image, self.unplug_after, self.after_write = image, unplug_after, after_write
+                 stall_after=None, bad_addr=None, loader_name="Felucca Update", after_name="Felucca", loader_id="ota-FM-1_901"):
+        self.image, self.unplug_after, self.after_write, self.loader_id = image, unplug_after, after_write, loader_id
         self.loader_name, self.after_name = loader_name, after_name
         self.stall_after, self.bad_addr = stall_after, bad_addr
         self.served = self.bad = self.upgrades = 0
@@ -124,7 +124,7 @@ class FakeFM1:
             if self.stall_after and self.served >= self.stall_after:
                 return
             if addr == I.FINISH_CHECK:
-                threading.Timer(0.05, self.boot, ("ota-FM-1_900", self.loader_name)).start()
+                threading.Timer(0.05, self.boot, (self.loader_id, self.loader_name)).start()
             elif addr == I.FINISH_WRITE:
                 threading.Timer(0.05, self.boot, (self.after_write, self.after_name)).start()
             else:
@@ -147,6 +147,36 @@ def package(product="FM-1_900", marker=True, size=0x2000):
         raw[i * I.BLK + I.KEEP] = (ord(product[i]) + i + 1) & 0xFF if i < len(product) else 0x7D
     raw[0x1800:0x1800 + 16] = I.LOADER_MARK if marker else bytes(16)
     return bytes(raw)
+
+
+def with_flash(raw, size):
+    """(0.9.16) the package with a UFW header whose flash.bin is size long (all fm1_install.flash_size_of reads)"""
+    def enc(b):
+        b, k = bytearray(b), 0xFFFF
+        for i in range(len(b)):
+            b[i] ^= k & 0xFF
+            k = ((k << 1) ^ (0x1021 if k & 0x8000 else 0)) & 0xFFFF
+        return b
+
+    def crc16(d):
+        c = 0
+        for x in d:
+            c ^= x << 8
+            for _ in range(8):
+                c = ((c << 1) ^ 0x1021 if c & 0x8000 else c << 1) & 0xFFFF
+        return c
+    lg = bytearray(I.logical_image(raw))
+    e = enc(bytes(12) + size.to_bytes(4, "little") + bytes(0x40))
+    h = bytearray(0x40)
+    h[8] = 1
+    h[2:4] = crc16(e).to_bytes(2, "little")
+    h[0:2] = crc16(h[2:]).to_bytes(2, "little")
+    lg[0:0x40], lg[0x40:0x90] = enc(h), e
+    out = bytearray(raw)
+    for i in range(I.BLOCKS):
+        out[i * I.BLK:i * I.BLK + I.KEEP] = lg[i * I.KEEP:(i + 1) * I.KEEP]
+    out[I.BLOCKS * I.BLK:] = lg[I.BLOCKS * I.KEEP:]
+    return bytes(out)
 
 
 TMP = Path(tempfile.mkdtemp(prefix="felucca-install-"))
@@ -220,6 +250,24 @@ def installs():
     dev = FakeFM1(image, identity="FM-1_015", name="JIANT")
     rc, out, err = cli(["--info"], dev)
     ok(rc == 0 and "FM-1_015" in out and "update loader" not in out, "--info: a port named 'JIANT' answering FM-1_015 is that firmware")
+
+    # (0.9.16) a package whose app area runs to 0x97000: finished only by this version's loader (ota-FM-1_901)
+    raw97 = with_flash(raw, 0x97000)
+    p97, image97 = pkgfile("app97.fwsc", raw97), I.logical_image(raw97)
+    ok(I.flash_size_of(image97) == 0x97000 and I.flash_size_of(I.logical_image(with_flash(raw, 0x93000))) == 0x93000
+       and I.flash_size_of(image) == 0, "flash.bin's length from the UFW entries (0x97000, 0x93000, none)")
+    dev = FakeFM1(image97, identity="ota-FM-1_900", name="JIANT Update")
+    rc, out, err = cli([p97, "--yes"], dev)
+    ok(rc == 5 and dev.upgrades == 0 and "earlier install" in err, "install: a 0x97000 package in an earlier loader's update mode -> refused, nothing served")
+    dev = FakeFM1(image97, identity="ota-FM-1_901", name="JIANT Update")
+    rc, out, err = cli([p97, "--yes"], dev)
+    ok(rc == 0 and dev.bad == 0, "install: a 0x97000 package in this loader's update mode -> finished")
+    dev = FakeFM1(image97)
+    rc, out, err = cli([p97, "--yes"], dev)
+    ok(rc == 0 and dev.bad == 0 and dev.upgrades == 2, "install: a 0x97000 package from the running firmware (its own loader)")
+    dev = FakeFM1(image97, identity="FM-1_900", name="JIANT", loader_id="ota-FM-1_900")
+    rc, out, err = cli([p97, "--yes"], dev)
+    ok(rc == 5 and "earlier install" in err, "install: a 0x97000 package whose loader comes up as an earlier one -> refused")
 
     dev = FakeFM1(image, identity="\x1b[2J\x1b]0;x\x07FM-1_905", name="Felucca")
     rc, out, err = cli(["--info"], dev)

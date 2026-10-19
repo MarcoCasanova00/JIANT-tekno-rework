@@ -218,6 +218,31 @@ int main(void)
         bad += check("small destination rejects whole object", st_load(OBJ_PROJECT0, got, sizeof got - 1u) < 0 && got[0] == 'X');
         bad += check("oversized save rejected", st_save(OBJ_PROJECT0, a, ST_PAYLOAD_MAX + 1u) < 0);
     }
+    {   /* (0.9.16) the flash map against the app area: tools/fm1pkg_make.py FLASH_SIZE (run_tests.sh passes it) is where
+         * the update loader stops writing; every object's two sectors, the FM6 voice bank (fm6_vbank.c FVB_HOME) and the
+         * OTA staging (ota.c OTA_AREA) lie at or above it, inside the 1 MiB part, and no two objects share a sector
+         * (but the retired FM6 bank and the user presets' FM6 patches: storage.c's flash map) */
+#ifndef FL_APP_END
+#define FL_APP_END 0x97000u
+#endif
+        uint32_t o, c, o2, c2, lo = 0xFFFFFFFFu, inside = 1, alone = 1;
+        for (o = 0; o < OBJ_COUNT; o++)
+            for (c = 0; c < 2u; c++) {
+                uint32_t s = st_sector(o, c);
+                if (s < lo) lo = s;
+                inside &= s >= FL_APP_END && s + ST_SECTOR <= 0x100000u && !(s & (ST_SECTOR - 1u));
+                for (o2 = 0; o2 < OBJ_COUNT; o2++)
+                    for (c2 = 0; c2 < 2u; c2++)
+                        if ((o2 != o || c2 != c) && st_sector(o2, c2) == s &&
+                            !((o == OBJ_FM6BANK || o == OBJ_UPFM6) && (o2 == OBJ_FM6BANK || o2 == OBJ_UPFM6)))
+                            alone = 0;
+            }
+        printf("  flash map: the lowest object sector %#x, the app area ends at %#x\n", lo, FL_APP_END);
+        bad += check("no object in the app area (every sector >= its end)", inside && lo >= FL_APP_END);
+        bad += check("the voice bank (0xE7000) and the OTA staging (0xE0000) above it", 0xE7000u >= FL_APP_END &&
+                     0xE0000u >= FL_APP_END);
+        bad += check("no two objects share a sector", alone);
+    }
     printf("%s\n", bad ? "STORAGE TEST FAILED" : "storage test passed");
     return bad != 0;
 }

@@ -16,7 +16,8 @@
  * 0x01C7FD50.. is reserved: boot_info, boot-state mailbox, vector table. */
 MEMORY
 {
-    XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x8EA90   /* = tools/fm1pkg_make.py APP_SLOT (0.9.13: the region ends at 0x92FFE) */
+    XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x92A90   /* = tools/fm1pkg_make.py APP_SLOT (0.9.13: the region ends at 0x92FFE; 0.9.16:
+                                                         * at 0x96FFE, below the store at 0x97000) */
     LOWBUF (rw)  : ORIGIN = 0x01C00000, LENGTH = 0x7000
     RAM    (rwx) : ORIGIN = 0x01C08000, LENGTH = 96K
     POOL   (rw)  : ORIGIN = 0x01C20000, LENGTH = 0x4FC00

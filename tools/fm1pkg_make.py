@@ -20,7 +20,7 @@ The three SDK files (uboot.boot, cfg_tool.bin, eq_cfg_hw.bin) are Apache-2.0, no
 ship LICENSES/Apache-2.0.txt with every package (LICENSING.md; make_site.py and
 build.py --release do).
 
-  fm1pkg_make.py APP.bin OTA.bin OUT.fwsc [--product FM-1_9XY] [--key 0x980F]
+  fm1pkg_make.py APP.bin OTA.bin OUT.fwsc [--product FM-1_9XY] [--key 0x980F] [--layout 0.9.13]
 """
 import argparse
 import os
@@ -30,9 +30,22 @@ from pathlib import Path
 # (JIANT 0.9.13) the app slot grows from the stock 0x8DFBC to 0x8EA90 (+2772 B): the encrypted region (app_area_head
 # block + cfg_tool.bin + the cfg directory with eq_cfg_hw.bin) now ends at 0x92FFE, inside flash.bin [0, 0x93000)
 # that every Felucca/JIANT loader already writes whole (0xFF padding up to 0x93000 until 0.9.12): no loader change.
+# (JIANT 0.9.16) and by 16 KiB more, to 0x92A90: the region ends at 0x96FFE and flash.bin is [0, 0x97000), up to
+# Felucca's store (fm1_flash.h FL_DATA_LO, the projects from 0x97000). [0x93000, 0x97000) held nothing of Felucca or
+# JIANT: no object, record or backup ever lived there (storage.c, ldr_core.c, tests/storage_test.c checks it); on a
+# device that ran the stock firmware it holds the first 16 KiB of the stock firmware's settings area (its VM), which
+# JIANT already overwrote from 0x97000 on and the installer never kept. The update loader writes up to the end of
+# the package's flash.bin (ldr_core.c, from 0.9.16; the loaders of 0.9.15 and earlier write [0x4000, 0x93000) only,
+# so the installers refuse to finish a package of this layout with one of them: web/fm1ota.js, fm1_install.py).
+# The SDK SPL looks the app up by app_dir_head only and boots it with the whole XIP window decrypted (it writes
+# SFCENC_CON = 1 before the jump; uboot.boot of AC79NN_SDK_V1.2.1), so code past 0x93000 reads as code.
 # firmware/app.ld's XIP LENGTH is this value (tools/build.py checks it).
-APP_SLOT = 0x8EA90
-FLASH_SIZE = 0x93000
+APP_SLOT = 0x92A90
+FLASH_SIZE = 0x97000
+DATA_LO = 0x97000                      # Felucca's store (fm1_flash.h FL_DATA_LO): flash.bin never reaches into it
+STOCK_CODE_END = 0x93000               # the stock firmware's code area: its region descriptors (kept as they were)
+LAYOUTS = {"0.9.16": (APP_SLOT, FLASH_SIZE), "0.9.13": (0x8EA90, 0x93000)}   # --layout: an earlier package's (tests)
+assert FLASH_SIZE <= DATA_LO
 KEY = 0x980F
 # flash header: JieLi SDK defaults (burner_size 544, VID "0.01", flash_size 0xFF000,
 # fs_ver 0x10, PID "AC791N_STORY"), plain, without its CRC
@@ -140,8 +153,10 @@ def flash_image(app, key):
     ents = [entry(crc16(app), 0x120, APP_SLOT, 0x82, 0xFF, 0, "app.bin"),
             entry(crc16(cfg_tool), 0x120 + APP_SLOT, len(cfg_tool), 0x82, 0xFF, 0, "cfg_tool.bin"),
             # region descriptors; the bytes after the names are SDK packer fields (VM size, "CODE", "AUTO")
-            entry(0xFFFF, 0x93000, 352256, 0x12, 0x80, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
-            entry(0xFFFF, 0, FLASH_SIZE, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
+            # (0.9.16) VM and PRCT as the stock package has them, though the app now runs past 0x93000: neither the
+            # SPL nor JIANT reads them, and a loader of the stock firmware may compare them with its own (return to V15)
+            entry(0xFFFF, STOCK_CODE_END, 352256, 0x12, 0x80, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
+            entry(0xFFFF, 0, STOCK_CODE_END, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
             entry(0xFFFF, 0xE9000, 0x1000, 0x92, 0x80, 0, bytes.fromhex("4254494600ffffffffffffff4155544f")),
             entry(0xFFFF, 0xEA000, 0x12000, 0x92, 0x81, 1, "USR")]
     area[32:32 + len(b"".join(ents))] = b"".join(ents)
@@ -210,9 +225,12 @@ def main():
     ap.add_argument("--product", default="FM-1_900")
     ap.add_argument("--key", type=lambda s: int(s, 0), default=KEY)
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
+    ap.add_argument("--layout", choices=sorted(LAYOUTS), default="0.9.16",
+                    help="the slot and flash.bin size (0.9.13: those of the 0.9.13..0.9.15 packages, for the tests)")
     a = ap.parse_args()
-    global SDK
+    global SDK, APP_SLOT, FLASH_SIZE
     SDK = a.sdk
+    APP_SLOT, FLASH_SIZE = LAYOUTS[a.layout]
     pkg = ufw(flash_image(a.app.read_bytes(), a.key), a.ota.read_bytes(), a.product)
     a.out.write_bytes(pkg)
     print(f"package {a.out}: {len(pkg)} B, identity {a.product}, chip key {a.key:#06x}")

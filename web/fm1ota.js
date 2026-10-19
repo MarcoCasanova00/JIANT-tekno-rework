@@ -7,6 +7,8 @@
 // the loader reads the whole image and writes it. Both steps are "the device
 // asks, we answer": cmd 0x30 read requests on the logical image.
 
+import { crc16 } from "./fm1pkg.js";
+
 const HS_QUERY = [0xF0, 0x00, 0x32, 0x45, 0x00, 0x00, 0x00, 0x40, 0x7F, 0xF7];
 const UPGRADE = [0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7];
 const MAXDATA = 512;
@@ -41,9 +43,33 @@ export function pairOutput(input, outs) {
   return PORT_RE.test(input.name || "") && named.length === 1 ? named[0] : null;
 }
 
+/* (0.9.16) the length of a package's flash.bin, from the UFW entry list at the start of its logical image: 0x97000 from
+ * 0.9.16 (the app area up to 0x97000), 0x93000 for the earlier ones and the official V15; 0 when the image is no package.
+ * The update loaders of 0.9.15 and earlier (identity ota-FM-1_900) write [0x4000, 0x93000) only: one of them must not
+ * finish a 0x97000 package (the rest of the app would be missing), nor may the official one; this version's loader
+ * (ota-FM-1_901, firmware/loader/loader.c) writes either */
+export const OLD_APP_END = 0x93000;
+function ufwDecode(b) {
+  let k = 0xFFFF;
+  for (let i = 0; i < b.length; i++) { b[i] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; }
+  return b;
+}
+export function flashSizeOf(image) {
+  if (!image || image.length < 0x400) return 0;
+  const h = ufwDecode(image.slice(0, 0x40)), nent = h[8] | (h[9] << 8);
+  if (crc16(h.subarray(2, 0x40)) !== (h[0] | (h[1] << 8)) || !nent || nent > 11) return 0;
+  for (let i = 0; i < nent; i++) {
+    const e = ufwDecode(image.slice(0x40 + i * 0x50, 0x90 + i * 0x50));
+    if ((e[0] | (e[1] << 8)) === 0) return (e[12] | (e[13] << 8) | (e[14] << 16) | (e[15] << 24)) >>> 0;
+  }
+  return 0;
+}
+export const loaderTakes = (id, image) => flashSizeOf(image) <= OLD_APP_END || (/^ota-/i.test(id.model) && id.version >= 901);
+
 // errors carry a code the pages translate: notfound, busy (a port another program holds), noanswer (a port that
 // does not answer the identity query), model, noupdate (the firmware never asked for the update), stopped, noloader,
-// lost, noreturn, mismatch (detail: the identity the device reports), badreq
+// lost, noreturn, mismatch (detail: the identity the device reports), badreq, oldloader (0.9.16: an earlier version's
+// update loader, from an interrupted install, cannot finish this package: detail its identity)
 export function fail(code, msg, detail = "") { const e = new Error(msg); e.code = code; e.detail = detail; return e; }
 
 export function pack7(data) {
@@ -289,6 +315,11 @@ export class Updater {
   // step 2 with the loader found by find()/waitFor()
   async write(ota, image, step) {
     this.log(`loader: ${ota.id.text} on ${ota.name}`);
+    if (!loaderTakes(ota.id, image)) {
+      ota.link.close();
+      throw fail("oldloader", `the update loader ${ota.id.text} (an earlier install, not finished) writes the flash only up to ` +
+        `0x93000; this package needs 0x${flashSizeOf(image).toString(16)}: nothing was written. Finish that install first`, ota.id.text);
+    }
     ota.link.send(UPGRADE);
     await sleep(this.t.settle2);
     const s2 = await this.serve(ota.link, image, 0xF0000000, this.t.idle2, (n) => step("write", n));

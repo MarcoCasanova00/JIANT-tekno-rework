@@ -17,8 +17,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
-import { logicalImage, productOf } from "./fm1pkg.js";
-import { Updater, pack7, unpack7, pairOutput, portBase, PORT_RE } from "./fm1ota.js";
+import { crc16, logicalImage, productOf } from "./fm1pkg.js";
+import { Updater, pack7, unpack7, pairOutput, portBase, PORT_RE, flashSizeOf, loaderTakes } from "./fm1ota.js";
 import { bkU32, bkR32, bkPack, bkCrc, readBackup } from "./fm1backup.js";
 import * as D from "./fm1diag.js";
 
@@ -1577,7 +1577,7 @@ class FakeFM1 {
       this.waiting = null;
       this.served++;
       if (this.served >= this.unplugAfter) { this.input.state = this.output.state = "disconnected"; return; }
-      if (addr === 0xE0000000) { if (!this.o.noLoader) setTimeout(() => this.boot("ota-FM-1_900", this.o.loaderName || "JIANT Update"), 300); }
+      if (addr === 0xE0000000) { if (!this.o.noLoader) setTimeout(() => this.boot(this.o.loaderId || "ota-FM-1_901", this.o.loaderName || "JIANT Update"), 300); }
       else if (addr === 0xF0000000) setTimeout(() => this.boot(this.after, this.o.afterName || "JIANT"), 300);
       else this.next();
     }
@@ -1626,6 +1626,19 @@ function installerText() {
 const FAST = { hs: 120, hsTries: 1, findTries: 2, backoff: 20, settle1: 40, idle1: 400, upgradeTries: 2, loaderSettle: 40,
   loader: 2500, settle2: 40, idle2: 3000, back: 3000, poll: 60, info: 300, infoTries: 2 };
 const IMG = Uint8Array.from({ length: 0x2000 }, (_, i) => (i * 7) & 0xFF);
+/* (0.9.16) IMG with a UFW header whose flash.bin is flSize long (fm1ota.js flashSizeOf reads only that) */
+function imgWithFlash(flSize) {
+  const img = IMG.slice(), h = new Uint8Array(0x40), e = new Uint8Array(0x50);
+  const ufw = (b) => { let k = 0xFFFF; for (let i = 0; i < b.length; i++) { b[i] ^= k & 0xFF; k = ((k << 1) ^ (k & 0x8000 ? 0x1021 : 0)) & 0xFFFF; } return b; };
+  e.set([0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, flSize & 0xFF, (flSize >> 8) & 0xFF, (flSize >> 16) & 0xFF, 0]);
+  ufw(e);
+  h[8] = 1;
+  const l = crc16(e); h[2] = l & 0xFF; h[3] = l >> 8;
+  const c = crc16(h.subarray(2)); h[0] = c & 0xFF; h[1] = c >> 8;
+  img.set(ufw(h), 0); img.set(e, 0x40);
+  return img;
+}
+const IMG97 = imgWithFlash(0x97000), IMG93 = imgWithFlash(0x93000);
 const str = (x) => [...Buffer.from(x)];
 /* INFO as JIANT / Felucca / Skiff lay it out: version, engines, the tags after CHAIN_ROWS (16); backup: 42 01 03 */
 function infoOf(ver, ntrk, { backup = true, jiant = false } = {}) {
@@ -1697,6 +1710,27 @@ async function installerFlows() {
   ok(!x.dev.editorCmds.length, "installer: an official firmware is never asked the editor's INFO");
   x = await run("v15", { identity: "ota-FM-1_900", name: "JIANT Update" });
   ok(x.r === "ok" && x.c.state.fw.kind === "loader" && x.dev.identity === "FM-1_900", "installer: in update mode (ota-FM-1): Install resumes the write");
+  /* (0.9.16) the app area to 0x97000: only this version's loader (ota-FM-1_901) finishes such a package */
+  ok(flashSizeOf(IMG97) === 0x97000 && flashSizeOf(IMG93) === 0x93000 && flashSizeOf(IMG) === 0,
+    "installer: flash.bin's length from the package's UFW entries (0x97000, 0x93000; none in a non-package)");
+  ok(!loaderTakes({ model: "ota-FM-1", version: 900 }, IMG97) && loaderTakes({ model: "ota-FM-1", version: 901 }, IMG97) &&
+     loaderTakes({ model: "ota-FM-1", version: 900 }, IMG93) && !loaderTakes({ model: "ota-FM-1", version: NaN }, IMG97),
+    "installer: a 0x97000 package only with loader 901; a 0x93000 one with any");
+  const runImg = async (img, p, o) => { const dev = new FakeFM1(img, { ...PROFILES[p], after: "FM-1_900", ...o }); const c = { ...flowCtx(dev), image: img };
+    return { dev, c, r: await codeOf(D.runInstall(c)) }; };
+  x = await runImg(IMG97, "v15", { identity: "ota-FM-1_900", name: "JIANT Update" });
+  ok(x.r === "oldloader" && x.dev.served === 0 && x.dev.identity === "ota-FM-1_900",
+    "installer: in update mode of an earlier loader (ota-FM-1_900) with a 0x97000 package: 'oldloader', nothing served");
+  x = await runImg(IMG97, "v15", { identity: "ota-FM-1_015", name: "FM-1" });
+  ok(x.r === "oldloader" && x.dev.served === 0, "installer: in the official loader's update mode with a 0x97000 package: 'oldloader'");
+  x = await runImg(IMG97, "v15", { identity: "ota-FM-1_901", name: "JIANT Update" });
+  ok(x.r === "ok" && x.dev.identity === "FM-1_900" && x.dev.bad === 0, "installer: in update mode of this loader (ota-FM-1_901): resumed");
+  x = await runImg(IMG93, "v15", { identity: "ota-FM-1_900", name: "JIANT Update" });
+  ok(x.r === "ok" && x.dev.identity === "FM-1_900", "installer: an earlier version (0x93000) resumed with an earlier loader");
+  x = await runImg(IMG97, "v15");
+  ok(x.r === "ok" && x.dev.identity === "FM-1_900" && x.dev.bad === 0, "installer: a 0x97000 package over official V15: its own loader (901) writes it");
+  x = await runImg(IMG97, "jiant", { loaderId: "ota-FM-1_900" });
+  ok(x.r === "oldloader", "installer: a 0x97000 package whose loader comes up as an earlier one: refused before the write");
   x = await run("v15", { busy: true });
   ok(x.r === "busy", "installer: the port held by another program (Windows: open() rejects): 'busy'");
   x = await run("v15", { mute: true });

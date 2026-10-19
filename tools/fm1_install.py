@@ -44,7 +44,7 @@ DELAY = {"open": 0.3, "start": 2.0, "reply": 0.01, "loader": 3.0, "reboot": 3.0,
          "wait_loader": 30.0, "wait_reboot": 40.0}
 
 EXIT = {"usage": 2, "badpkg": 2, "notfound": 3, "model": 6, "lost": 4, "stopped": 4, "badreq": 4,
-        "noloader": 5, "noreturn": 5, "mismatch": 6}
+        "noloader": 5, "noreturn": 5, "mismatch": 6, "oldloader": 5}
 
 
 class InstallError(Exception):
@@ -131,6 +131,45 @@ def product_of(raw):
     if len(raw) < BLOCKS * BLK:
         raise InstallError("badpkg", "not an FM-1 package (too short)")
     return "".join(chr((m - i - 1) & 0xFF) for i in range(BLOCKS) if (m := raw[i * BLK + KEEP]) != 0x7D)
+
+
+OLD_APP_END = 0x93000
+
+
+def flash_size_of(image):
+    """(0.9.16) flash.bin's length from the logical image's UFW entry list (0 when it is no package): 0x97000 from 0.9.16,
+    the app area up to 0x97000; 0x93000 before and the official V15. The update loaders of 0.9.15 and earlier
+    (ota-FM-1_900) write [0x4000, 0x93000) only and must not finish a 0x97000 package; ota-FM-1_901 writes either
+    (web/fm1ota.js flashSizeOf, loaderTakes)"""
+    def dec(b):
+        b, k = bytearray(b), 0xFFFF
+        for i in range(len(b)):
+            b[i] ^= k & 0xFF
+            k = ((k << 1) ^ (0x1021 if k & 0x8000 else 0)) & 0xFFFF
+        return b
+
+    def crc16(d):
+        c = 0
+        for x in d:
+            c ^= x << 8
+            for _ in range(8):
+                c = ((c << 1) ^ 0x1021 if c & 0x8000 else c << 1) & 0xFFFF
+        return c
+    if len(image) < 0x400:
+        return 0
+    h = dec(image[:0x40])
+    nent = h[8] | h[9] << 8
+    if crc16(h[2:0x40]) != (h[0] | h[1] << 8) or not 0 < nent <= 11:
+        return 0
+    for i in range(nent):
+        e = dec(image[0x40 + i * 0x50:0x90 + i * 0x50])
+        if e[0] | e[1] << 8 == 0:
+            return int.from_bytes(e[12:16], "little")
+    return 0
+
+
+def loader_takes(ident, image):
+    return flash_size_of(image) <= OLD_APP_END or (ident.loader and ident.version >= 901)
 
 
 def logical_image(raw):
@@ -334,6 +373,12 @@ class Updater:
 
     def write(self, ota, image, step):
         """step 2: the loader reads and writes the whole package, then restarts"""
+        if not loader_takes(ota.id, image):
+            ota.link.close()
+            raise InstallError("oldloader", f"the FM-1 is in update mode from an earlier install ({ota.id.text}), whose "
+                                            f"loader writes the flash only up to 0x93000; this package needs "
+                                            f"{flash_size_of(image):#x}: nothing was written. Finish that install with "
+                                            "its own package first, then install this one")
         step("write", 0)
         ota.link.send(UPGRADE)
         time.sleep(DELAY["start"])
