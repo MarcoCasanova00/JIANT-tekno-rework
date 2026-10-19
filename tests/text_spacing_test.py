@@ -8,7 +8,8 @@ whole string (advances and GPOS kerning at 16 x the size).
 
 Per glyph: its displacement d = ink centroid (tables) - ink centroid (reference); area coverage keeps the first
 moment, so d is how far the glyph sits from its true place. Per pair: gap error = d[i+1] - d[i], the error of
-the space between two neighbours. Fails when a pair of S or M is off by more than 0.25 px or L by more than 0.5 px.
+the space between two neighbours. Fails when a pair is off by more than a phase step (1 / phases px: 0.5 px with 2 phases, S M L since 0.9.16; 0.25
+px with 4, S M until 0.9.15).
 
   text_spacing_test.py [ui_fonts.h] [--png DIR [--tag NAME]] [--rule gfx|rounded] [--no-limit]
   (PNG: the specimen strings x4, gray on black; --rule rounded measures tables made before the phases)
@@ -33,7 +34,6 @@ LOWER = ["oeo", "coco", "eco", "nono", "minimum", "hello", "level", "decay", "re
 UPPER = ["CUTOFF", "RESO", "LEVEL", "DECAY", "RELEASE", "SOUND", "OCOE", "COCO", "NONO", "MINIMUM", "SUPER SAW",
          "FELUCCA", "PRESETS", "ANALOG", "DIGITAL", "PITCH", "SWING", "AV AW LT TA YO"]
 RULE = ["gfx"]   # "gfx": src/gfx.c cv_text; "rounded": the earlier rule (each glyph at the rounded pen, 1 phase)
-LIMIT = {"S": 0.25, "M": 0.25, "L": 0.5}
 
 
 def parse(path):
@@ -192,11 +192,12 @@ def main():
         e = sorted(pairs, key=lambda p: -abs(p[1]))
         mx = abs(e[0][1])
         rms = (sum(v * v for _, v in pairs) / len(pairs)) ** 0.5
-        over = sum(abs(v) > LIMIT[name] for _, v in pairs)
-        ok = mx <= LIMIT[name] + 1e-9
+        limit = 1.0 / (1 << f["psh"])        # a phase step
+        over = sum(abs(v) > limit for _, v in pairs)
+        ok = mx <= limit + 1e-9
         bad += not ok
         print(f"  {name} {px}px x{1 << f['psh']} phases: {len(pairs)} pairs, gap error max {mx:.3f} px, rms {rms:.3f} px, "
-              f"{over} over {LIMIT[name]} px {'ok' if ok else 'FAIL'}")
+              f"{over} over {limit} px {'ok' if ok else 'FAIL'}")
         print("    worst: " + ", ".join(f"{p!r} {v:+.2f}" for p, v in e[:10]))
         if a.png:
             Path(a.png).mkdir(parents=True, exist_ok=True)
