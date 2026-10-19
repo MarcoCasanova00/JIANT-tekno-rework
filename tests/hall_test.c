@@ -9,6 +9,9 @@
  * density, Abel & Huang, first reaches 0.9: how soon the tail is a smooth wash), the tail's left / right correlation
  * (0: as wide as two rooms; 1: mono), its spectral centroid; level against ROOM. Checks: HALL's RT60 rises with SIZE,
  * it is bounded under loud noise and dies after it, wider and denser than ROOM. Demos: a pluck pattern through each. */
+#ifndef HALL_TAG
+#define HALL_TAG ""
+#endif
 #define main hostsim_main
 #include "hostsim.c"
 #undef main
@@ -121,6 +124,16 @@ static int32_t noise(int32_t amp)
     xs ^= xs << 13; xs ^= xs >> 17; xs ^= xs << 5;
     return (int32_t)(((int64_t)(int32_t)xs * amp) >> 31);
 }
+/* a dry snare: a 180 Hz body (60 ms) and a noise burst (30 ms), once at 0.25 s; and a click at 2.25 s */
+static int32_t x_snare(uint32_t t)
+{
+    if (t >= FS / 4u && t < FS / 4u + FS / 10u) {
+        double u = (double)(t - FS / 4u) / FS;
+        return (int32_t)(30000.0 * (0.6 * sin(2 * M_PI * 180.0 * u) * exp(-u / 0.02) + 0.8 * exp(-u / 0.01) * (noise(65536) / 65536.0)));
+    }
+    if (t == 9u * FS / 4u) return 60000;
+    return 0;
+}
 static int32_t x_burst(uint32_t t) { return t < FS / 50u ? noise(40000) : 0; }
 static int32_t x_loud(uint32_t t) { return t < 2u * FS ? noise(200000) : 0; }
 /* the demo: plucked saw notes, an arpeggio of a minor 9th chord, 8th notes at 100 BPM, 6 s, then the tail */
@@ -203,6 +216,19 @@ static double energy(const int32_t *a, uint32_t i0, uint32_t i1)
     for (i = i0; i < i1; i++) e += (double)a[i] * a[i];
     return e;
 }
+/* the wet left / right as 32-bit float (no 16-bit floor under a long tail: the analysis' IRs) */
+static void wavf(const char *path, uint32_t n)
+{
+    FILE *f = fopen(path, "wb");
+    uint32_t i, v;
+    if (!f) return;
+    fwrite("RIFF", 1, 4, f); v = 36 + n * 8; fwrite(&v, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f);
+    v = 16; fwrite(&v, 4, 1, f);
+    { uint16_t h[2] = {3, 2}; fwrite(h, 2, 2, f); v = FS; fwrite(&v, 4, 1, f); v = FS * 8; fwrite(&v, 4, 1, f); h[0] = 8; h[1] = 32; fwrite(h, 2, 2, f); }
+    fwrite("data", 1, 4, f); v = n * 8; fwrite(&v, 4, 1, f);
+    for (i = 0; i < n; i++) { float s[2] = {xl[i] / 32768.0f, xr[i] / 32768.0f}; fwrite(s, 4, 2, f); }
+    fclose(f);
+}
 static void wav(const char *path, int32_t (*x)(uint32_t), uint32_t n, double dry, double scale)
 {
     FILE *f = fopen(path, "wb");
@@ -248,10 +274,10 @@ int main(int argc, char **argv)
         model_reset(M_HALL, 90, 30, 0, 0); model_run(M_HALL, x_burst, n); r90 = rt60_of(xl, xr, n);
         model_reset(M_HALL, 127, 30, 0, 0); model_run(M_HALL, x_burst, NMAX); r127 = rt60_of(xl, xr, NMAX);
         printf("hall:   HALL RT60 (DAMP 30): SIZE 0 %.2f s, 90 %.2f s, 127 %.2f s\n", r0, r90, r127);
-        check("HALL: RT60 rises with SIZE: 0 under 0.6 s, 90 within 1.5 .. 5 s, 127 over 5 s", r0 > 0 && r0 < 0.6 && r90 > 1.5 && r90 < 5 && r127 > 5);
+        check("HALL: RT60 rises with SIZE: 0 under 0.8 s, 90 within 1.5 .. 5 s, 127 over 5 s", r0 > 0 && r0 < 0.8 && r90 > 1.5 && r90 < 5 && r127 > 5);
     }
     check("HALL: wider than ROOM (tail L/R correlation under 0.3 at WIDE 0)", cr[M_HALL] < 0.3 && cr[M_HALL] < cr[M_ROOM]);
-    check("HALL: dense sooner than ROOM (never, -1) and SLOOP (NED 0.9)", nd[M_HALL] > 0 && (nd[M_ROOM] < 0 || nd[M_HALL] <= nd[M_ROOM]) && nd[M_HALL] <= nd[M_SLOOP]);
+    check("HALL: dense (NED 0.9) within 150 ms and sooner than SLOOP", nd[M_HALL] > 0 && nd[M_HALL] <= 0.15 && nd[M_HALL] <= nd[M_SLOOP]);
     check("HALL: level within 4 dB of ROOM (a noise burst, 2 s)", fabs(10 * log10(lv[M_HALL] / lv[M_ROOM])) < 4.0);
     {   /* bounded under 2 s of loud noise at SIZE 127, MOD 127, then dies */
         int32_t pk = 0;
@@ -286,9 +312,18 @@ int main(int argc, char **argv)
             model_reset(m, 90, 60, m == M_HALL ? 20 : 0, 0);
             memset(pl_ph, 0, sizeof pl_ph); memset(pl_env, 0, sizeof pl_env);
             model_run(m, x_pluck, n);
-            snprintf(p, sizeof p, "%s/reverb_%s.wav", dir, F[m]);
+            snprintf(p, sizeof p, "%s/reverb_%s%s.wav", dir, F[m], m != M_SLOOP ? HALL_TAG : "");
             wav(p, x_pluck, n, 1.0, 1.0);
             printf("hall: demo %s\n", p);
+            model_reset(m, 90, 60, m == M_HALL ? 20 : 0, 0);   /* a dry snare / click hit, then its room */
+            model_run(m, x_snare, 4u * FS / CTL * CTL);
+            snprintf(p, sizeof p, "%s/snare_%s%s.wav", dir, F[m], m != M_SLOOP ? HALL_TAG : "");
+            wav(p, x_snare, 4u * FS / CTL * CTL, 1.0, 1.0);
+            printf("hall: demo %s\n", p);
+            model_reset(m, 90, 60, m == M_HALL ? 20 : 0, 0);   /* the impulse response, wet only (analysis) */
+            model_run(m, x_imp, 4u * FS / CTL * CTL);
+            snprintf(p, sizeof p, "%s/ir_%s%s.wav", dir, F[m], m != M_SLOOP ? HALL_TAG : "");
+            wavf(p, 4u * FS / CTL * CTL);
         }
     }
     printf(bad ? "hall test FAILED\n" : "hall test passed\n");

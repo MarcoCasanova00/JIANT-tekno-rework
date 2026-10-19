@@ -619,14 +619,18 @@ static void demos(const char *dir)
 }
 
 /* ------------------------------------------------- 9. punch-in MIDI --- */
-static uint32_t zc(const int32_t *x, uint32_t a, uint32_t b)   /* zero crossings, low-passed (~350 Hz, 2 poles) */
+static uint32_t zc(const int32_t *x, uint32_t a, uint32_t b)   /* zero crossings, low-passed (~350 Hz, 4 poles: 0.9.14,
+                                                                  * was 2: a preset's 2nd harmonic counted, unless a mono
+                                                                  * reverb happened to mask it) */
 {
     uint32_t i, c = 0;
-    int32_t y1 = 0, y2 = 0, p = 0;
+    int32_t y1 = 0, y2 = 0, y3 = 0, y4 = 0, p = 0;
     for (i = a; i < b; i++) {
         y1 += (x[i] - y1) >> 5;
-        y2 += (y1 - y2) >> 5;
-        if (i > a + 400u)
+        y3 += (y1 - y3) >> 5;
+        y4 += (y3 - y4) >> 5;
+        y2 += (y4 - y2) >> 5;
+        if (i > a + 800u)
             c += p < 0 && y2 >= 0;
         p = y2;
     }

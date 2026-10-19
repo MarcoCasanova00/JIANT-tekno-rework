@@ -36,7 +36,7 @@ static uint32_t mfnv(uint32_t h, const void *p, uint32_t n)
 }
 
 /* ---- 2. a project of before: the steps' MICRO set as 0.9.0 stored it (cwhen's bits 4-7, sixteenths) ---- */
-#define MICRO_OLD_090 0xd5c5b5c5u
+#define MICRO_OLD_090 0x4ba7ed0cu            /* (0.9.14: ROOM's air and in-loop allpasses; 0.9.0 .. 0.9.13: 0xd5c5b5c5) */
 #define MICRO_PACK_090 0x55f3c173u
 static void old_steps(void)
 {

@@ -21,7 +21,7 @@ drum_side_add 30
 drum_mix 126
 slicer_bus 819
 fm1_alnk0_irq 270
-fm1_timer5_irq 33439
+fm1_timer5_irq 37086
 ep4_tx 0
 ep4_fill 148
 click_render 30
@@ -33,7 +33,8 @@ perf_mute 21
 perf_pre 31
 perf_block 522
 perf_master 32
-rev_room 160
+rev_room_mod 389
+rev_hall 608
 rev_spring 127
 drum_bus 104
 dist_amp 84

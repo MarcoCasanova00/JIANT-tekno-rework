@@ -1541,7 +1541,7 @@ function makeMockDevice(opt = {}) {
     E("ENG", ["ANALOG", "-", "PHASE", "LOFI", "-", "VOICE", "-", "WHEEL",
       "-", "-", "DRUM", "NOISE", "FM6", "-", "ANIMAL"], 0), D("CLIP", F.PCT, 0, 100, 0),   /* G_CLIP (was SET); 0.8.3 ANIMAL */
     E("CLRSQ", NGO, 0), E("INIT", NGO, 0),
-    E("TYPE", ["ROOM", "SPRING", "SHIMR", "RESO", "CLOUD"], 0),               /* G_RTYPE (id 24, was G_DRCH): the reverb's model */
+    E("TYPE", ["ROOM", "SPRING", "SHIMR", "RESO", "CLOUD", "HALL"], 0),       /* G_RTYPE (id 24, was G_DRCH): the reverb's model (0.9.14: + HALL) */
     D("PUNCH", F.PCT, 0, 100, 0), D("DUCK", F.PCT, 0, 100, 0),   /* G_PUNCH, G_DUCK (JIANT; were G_DRLVL, G_DRREV) */
     D("STEREO", F.BIPCT, -64, 63, 0), D("WIDE", F.PCT, 0, 127, 0),   /* (JIANT, FUNB) G_DHPF (0.6.9: G_CSTER, the CHORUS's stereo), G_WIDTH: width */
     D("MOD", F.PCT, 0, 127, 0), D("RATE", F.LFOHZ, 0, 127, 30), D("PRE", F.INT, -24, 100, 0),   /* the reverb's modulation, pre-delay (0.6.12: SHIMMER / CLOUD AIR below 0) */

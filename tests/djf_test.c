@@ -27,7 +27,7 @@ static void ck(const char *what, int ok)
 }
 
 /* ---- 1. centred: the render whose hash 0.9.0's sources give (the same code, built against them) ---- */
-#define DJF_CENTRE_090 0x8b898fe6u
+#define DJF_CENTRE_090 0xe1b22b9eu           /* (0.9.14: ROOM's air and in-loop allpasses; 0.9.0 .. 0.9.13: 0x8b898fe6) */
 static int32_t centre_peak;
 static uint32_t centre_render(void)
 {

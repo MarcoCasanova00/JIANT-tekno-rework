@@ -70,6 +70,17 @@ static struct {
     uint32_t dl_now, dl_old, dl_xf;      /* (0.6.81) TIME's crossfade; DEPTH and MIX gliding (fx.c) */
     int32_t cd, dm;
 } rf;
+static int16_t ref_rl[61 + 79 + 97 + 113];              /* (0.9.14) the allpasses inside the combs (fx.c rl_ap) */
+static uint16_t ref_rli[4];
+static int32_t ref_lap(uint32_t k, int32_t x)
+{
+    static const uint16_t B[4] = {0, 61, 61 + 79, 61 + 79 + 97}, N[4] = {61, 79, 97, 113};
+    int16_t *p = ref_rl + B[k] + ref_rli[k];
+    int32_t ob = *p * 2, v = x + *p;                   /* (fx.c: stored halved, rounded towards 0) */
+    *p = (int16_t)((v + ((uint32_t)v >> 31)) >> 1);
+    if (++ref_rli[k] >= N[k]) ref_rli[k] = 0;
+    return ob - (v >> 1);
+}
 static int32_t ref_rd(uint32_t d, int32_t m) { return dly_rd_of(ref_dly, rf.dly_w, d, m); }
 static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet, uint32_t n)
 {
@@ -114,11 +125,16 @@ static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_
         a = 0;
         {
             int16_t *c = ref_comb;
-            int32_t in = mulq15(rev_in[i], 2580);
+            int32_t in = mulq15(rev_in[i], 2050), al = 0, ar = 0;
             for (k = 0; k < 4u; k++) {
+                {   /* (0.9.14) ROOM's air: a tap of each comb (fx.c RA_OFF), read before the write */
+                    uint32_t q = rf.comb_i[k] + RA_OFF[k];
+                    int32_t t = c[q >= REV_COMB[k] ? q - REV_COMB[k] : q];
+                    if (k & 1u) ar += t; else al += t;
+                }
                 int32_t o = c[rf.comb_i[k]];
                 rf.comb_lp[k] = o + mulq15(rf.comb_lp[k] - o, 32767 - damp);
-                c[rf.comb_i[k]] = (int16_t)clamp(in + mulq15(rf.comb_lp[k], size), -32768, 32767);
+                c[rf.comb_i[k]] = (int16_t)clamp(in + ref_lap(k, mulq15(rf.comb_lp[k], size)), -32768, 32767);
                 if (++rf.comb_i[k] >= REV_COMB[k])
                     rf.comb_i[k] = 0;
                 a += o;
@@ -134,6 +150,7 @@ static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_
                     rf.ap_i[k] = 0;
                 c += REV_AP[k];
             }
+            y += (al + ar) >> 3;                        /* (the air's middle; its side is not compared) */
         }
         y += a;
         wet[i] = y;
@@ -165,7 +182,7 @@ static void test_room_identical(void)
             diff += w0[i] != w1[i];
         }
     }
-    check("ROOM: the buses bit for bit as before SPRING (30 s of noise sends, settings changing)", !diff && !fx.rtype);
+    check("ROOM: the buses bit for bit as before SPRING, + its air and in-loop allpasses (0.9.14) (30 s of noise sends, settings changing)", !diff && !fx.rtype);
 }
 
 /* ------------------------------------------------------------- SPRING --- */
@@ -722,7 +739,7 @@ static void test_jiant(void)
         song.g[G_DMIX] = 0;
         song.g[G_RWIDE] = 0;
         jrun(0, burst, FS, &side);
-        check("reverb WIDE: ROOM 127 a side (left and right apart), 0 none", sd > band_e(0, FS) * 0.05 && side == 0);
+        check("reverb WIDE: ROOM 127 a wider side than 0 (0.9.14: ROOM's air is never mono)", sd > band_e(0, FS) * 0.05 && side > 0 && sd > side * 1.5);
     }
     jreset();
     song.g[G_DMIX] = 0;
@@ -741,7 +758,7 @@ static void test_jiant(void)
             song.g[G_RRATE] = 127;
             for (b = 0; b < 4u * FS / CTL; b++) {
                 static int32_t z[CTL], w[CTL];
-                rev_room_mod(z, w, CTL, 0);
+                rev_room_mod(z, w, CTL, 0, song.g[G_RMOD], 0);
                 mx[kk] = (uint32_t)fx.rm_m[0] > mx[kk] ? (uint32_t)fx.rm_m[0] : mx[kk];
             }
         }

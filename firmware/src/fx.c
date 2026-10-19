@@ -693,7 +693,7 @@ static uint32_t delay_samples(void)
 
 /* (0.9.14) the reverbs' int16 lines (ROOM's combs and allpasses, CLOUD's line) written through a soft knee: linear to -2.5 dBFS (bit for bit as before there), then tanh up to
  * ~-0.1 dB: a hot send (DIST, CLIP, four parts at once) rounds off like tape, never a hard clamp in the loop */
-static inline int32_t rv_knee(int32_t x)
+static __attribute__((noinline)) int32_t rv_knee(int32_t x)   /* (out of line: its callers test the fast path) */
 {
     int32_t a = x < 0 ? -x : x;
     if (a <= 24576)
@@ -707,61 +707,38 @@ static int32_t rev_size(void)
     int32_t g = GFX(GF_RSIZE);
     return 25000 + g * 40 + g * g / 7;
 }
-/* ROOM (G_RTYPE 0): 4 damped combs + 2 allpasses (Freeverb-like, mono), added to out (WIDE: rev_room_mod) */
-static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *out, uint32_t n)
-{
-    uint32_t i;
-    int32_t size = rev_size(), dk = GFX(GF_RDAMP) * 200;   /* (32767 - damp) */
-    /* (0.7.9) the combs' and allpasses' indices and low-passes in registers through the block (they were loaded and
-     * stored every sample); the same arithmetic, the same sound */
-    uint32_t i0 = fx.comb_i[0], i1 = fx.comb_i[1], i2 = fx.comb_i[2], i3 = fx.comb_i[3], a0 = fx.ap_i[0], a1 = fx.ap_i[1];
-    int32_t l0 = fx.comb_lp[0], l1 = fx.comb_lp[1], l2 = fx.comb_lp[2], l3 = fx.comb_lp[3];
-    int16_t *c0 = rev_comb, *c1 = c0 + REV_COMB[0], *c2 = c1 + REV_COMB[1], *c3 = c2 + REV_COMB[2];
-    int16_t *p0 = rev_ap, *p1 = p0 + REV_AP[0];
-#define RV_COMB(C, I, L, K)                                                                                        \
-    {                                                                                                              \
-        int32_t o = C[I];                                                                                          \
-        L = o + mulq15(L - o, dk);                                                                                 \
-        C[I] = (int16_t)clamp(in + mulq15(L, size), -32768, 32767);                                                \
-        if (++I >= REV_COMB[K])                                                                                    \
-            I = 0;                                                                                                 \
-        a += o;                                                                                                    \
-    }
-#define RV_AP(P, I, K)                                                                                             \
-    {                                                                                                              \
-        int32_t o = P[I], v = a + (o >> 1);                                                                        \
-        P[I] = (int16_t)clamp(v, -32768, 32767);                                                                   \
-        a = o - a;                                      /* Freeverb: out = buf - in (o - v is a notch comb) */     \
-        if (++I >= REV_AP[K])                                                                                      \
-            I = 0;                                                                                                 \
-    }
-    for (i = 0; i < n; i++) {
-        int32_t a = 0, in = mulq15(rev_in[i], 2580);    /* 1/8 at -4 dB: level as before the allpass fix */
-        RV_COMB(c0, i0, l0, 0)
-        RV_COMB(c1, i1, l1, 1)
-        RV_COMB(c2, i2, l2, 2)
-        RV_COMB(c3, i3, l3, 3)
-        RV_AP(p0, a0, 0)
-        RV_AP(p1, a1, 1)
-        out[i] += a;
-    }
-#undef RV_COMB
-#undef RV_AP
-    fx.comb_i[0] = (uint16_t)i0; fx.comb_i[1] = (uint16_t)i1; fx.comb_i[2] = (uint16_t)i2; fx.comb_i[3] = (uint16_t)i3;
-    fx.ap_i[0] = (uint16_t)a0; fx.ap_i[1] = (uint16_t)a1;
-    fx.comb_lp[0] = l0; fx.comb_lp[1] = l1; fx.comb_lp[2] = l2; fx.comb_lp[3] = l3;
-}
-
+/* (0.9.14) ROOM's combs each with a short allpass inside its loop (1.4 .. 2.6 ms, prime, g 0.5): every pass round a
+ * comb is smeared a little more, so the tail grows noisy and dense instead of ringing at the combs' pitches */
+static const uint16_t RL_AP[4] = {61, 79, 97, 113};
+static int16_t rl_ap[61 + 79 + 97 + 113] __attribute__((section(".pool")));
+static uint16_t rl_i[4];
 /* (JIANT) ROOM with its networks modulated (G_RMOD > 0): each comb read up to ~5.7 ms nearer (between samples, the
  * depth square law, the offset ramped sample by sample: no steps), by a slow sine of G_RRATE a quarter apart per
  * comb: the resonances drift and detune, the ringing smears into a chorused, wide tail. WIDE wd (0.3): combs 1, 3
  * against 2, 4 as a side (left +, right -) into mix_l / mix_r. Its own loop: with MOD and WIDE 0 the plain one runs
  * (MOD 0 here: offsets 0, the plain one's sound) */
-static __attribute__((noinline)) void rev_room_mod(const int32_t *rev_in, int32_t *out, uint32_t n, int32_t wd)
+/* (0.9.14) ROOM's air: its bounces. After ROOM's block, four taps of its combs, each a different way along (7.3, 11.1,
+ * 16.9, 21.7 ms behind the sample: the send and its recirculations heard early, between the combs' own 25 .. 31 ms
+ * echoes, so the room is twice as dense from the start), the first and third on the left, the others on the right
+ * (already a little noisy: the allpasses inside the combs smear every pass). Their middle under the tail, their side
+ * always there (WIDE wider): ROOM is no longer mono. Its loop as before but for those allpasses (RT60 +9 %); its input
+ * 2 dB lower, the middle's level as before.
+ * (Read as each comb is written: inside ROOM's loop, only for the ROOM model, air != 0.) */
+static const uint16_t RA_OFF[4] = {1116 - 322, 1188 - 489, 1277 - 745, 1356 - 957};
+/* (0.9.14) a comb read m (Q8) nearer the write than its oldest sample i, between samples (out of line: flash) */
+static __attribute__((noinline)) int32_t rv_mread(const int16_t *c, uint32_t i, uint32_t L, int32_t m)
+{
+    uint32_t j0 = i + ((uint32_t)m >> 8), j1;
+    if (j0 >= L) j0 -= L;
+    j1 = j0 + 1u >= L ? 0u : j0 + 1u;
+    return c[j0] + (((c[j1] - c[j0]) * (m & 255)) >> 8);
+}
+static __attribute__((noinline)) void rev_room_mod(const int32_t *rev_in, int32_t *out, uint32_t n, int32_t wd, int32_t mod,
+                                                   int32_t air)
 {
     uint32_t i, k;
     int32_t size = rev_size(), damp = 32767 - GFX(GF_RDAMP) * 200, m1[4], dm[4];
-    int32_t depth = song.g[G_RMOD] ? 64 + song.g[G_RMOD] * song.g[G_RMOD] * 4 : 0;   /* Q8 samples: 0.25 .. 252 (~5.7 ms) */
+    int32_t depth = mod ? 64 + mod * mod * 4 : 0;     /* Q8 samples: 0.25 .. 252 (~5.7 ms) */
     fx.rm_ph += LFO_INC[song.g[G_RRATE] & 127];
     for (k = 0; k < 4u; k++) {
         m1[k] = (int32_t)(((uint32_t)(osc_sine(fx.rm_ph + k * 0x40000000u) + 32768) * (uint32_t)depth) >> 16);
@@ -769,48 +746,76 @@ static __attribute__((noinline)) void rev_room_mod(const int32_t *rev_in, int32_
             fx.rm_m[k] = m1[k];                         /* far outside the combs; from the new offset */
         dm[k] = (m1[k] - fx.rm_m[k]) / (int32_t)CTL;    /* (Q8, per sample) */
     }
-    for (i = 0; i < n; i++) {
-        int32_t a = 0, sd = 0;
-        int16_t *c = rev_comb;
-        int32_t in = mulq15(rev_in[i], 2580);
-        for (k = 0; k < 4u; k++) {
-            int32_t m = fx.rm_m[k] += dm[k];
-            uint32_t L = REV_COMB[k], j0 = fx.comb_i[k] + ((uint32_t)m >> 8), j1;
-            int32_t o0, o1, o;
-            if (j0 >= L)
-                j0 -= L;
-            j1 = j0 + 1u >= L ? 0u : j0 + 1u;
-            o0 = c[j0];
-            o1 = c[j1];
-            o = o0 + (((o1 - o0) * (m & 255)) >> 8);    /* (a shorter delay: nearer the write) */
-            fx.comb_lp[k] = o + mulq15(fx.comb_lp[k] - o, 32767 - damp);
-            c[fx.comb_i[k]] = (int16_t)clamp(in + mulq15(fx.comb_lp[k], size), -32768, 32767);
-            if (++fx.comb_i[k] >= L)
-                fx.comb_i[k] = 0;
-            a += o;
-            sd += (k & 1u) ? -o : o;
-            c += L;
+    {   /* (0.7.9 / 0.9.14) the indices, low-passes and offsets in registers through the block */
+        int16_t *c0 = rev_comb, *c1 = c0 + REV_COMB[0], *c2 = c1 + REV_COMB[1], *c3 = c2 + REV_COMB[2];
+        int16_t *q0 = rl_ap, *q1 = q0 + RL_AP[0], *q2 = q1 + RL_AP[1], *q3 = q2 + RL_AP[2], *p0 = rev_ap, *p1 = p0 + REV_AP[0];
+        uint32_t i0 = fx.comb_i[0], i1 = fx.comb_i[1], i2 = fx.comb_i[2], i3 = fx.comb_i[3];
+        uint32_t r0 = rl_i[0], r1 = rl_i[1], r2 = rl_i[2], r3 = rl_i[3], a0 = fx.ap_i[0], a1 = fx.ap_i[1];
+        int32_t l0 = fx.comb_lp[0], l1 = fx.comb_lp[1], l2 = fx.comb_lp[2], l3 = fx.comb_lp[3];
+        int32_t n0 = fx.rm_m[0], n1 = fx.rm_m[1], n2 = fx.rm_m[2], n3 = fx.rm_m[3], dk = 32767 - damp;
+#define RV_CM(C, I, L, K, Q, R, M, SG)                                                                             \
+        {                                                                                                          \
+            int32_t o = C[I];                                                                                      \
+            if ((M += dm[K]) != 0)                       /* (MOD: read nearer the write, between samples) */       \
+                o = rv_mread(C, I, REV_COMB[K], M);                                                                \
+            L = o + mulq15(L - o, dk);                                                                             \
+            {                                            /* (0.9.14) the allpass inside the loop */                \
+                int32_t ob_ = Q[R] * 2, v_ = mulq15(L, size) + Q[R];     /* (stored halved: |v| < 2^16, no clamp) */  \
+                Q[R] = (int16_t)((v_ + ((uint32_t)v_ >> 31)) >> 1);   /* (towards 0: no offset to hold) */          \
+                if (++R >= RL_AP[K]) R = 0;                                                                        \
+                C[I] = (int16_t)clamp(in + ob_ - (v_ >> 1), -32768, 32767);                                        \
+            }                                                                                                      \
+            if (air) {                                   /* (0.9.14) the air: a tap of the comb (RA_OFF) */        \
+                uint32_t q_ = I + RA_OFF[K];                                                                       \
+                int32_t t_ = C[q_ >= REV_COMB[K] ? q_ - REV_COMB[K] : q_];                                         \
+                if (K & 1) ar += t_; else al += t_;                                                                \
+            }                                                                                                      \
+            if (++I >= REV_COMB[K]) I = 0;                                                                         \
+            a += o;                                                                                                \
+            sd SG o;                                                                                               \
         }
-        if (wd) {
-            sd = (sd * wd) >> 7;
-            fx_sl[i] += sd;
-            fx_sr[i] -= sd;
+#define RV_AP2(P, I, K)                                                                                            \
+        {                                                                                                          \
+            int32_t o = P[I], v = a + (o >> 1);                                                                    \
+            P[I] = (int16_t)clamp(v, -32768, 32767);                                                               \
+            a = o - a;                                                                                             \
+            if (++I >= REV_AP[K]) I = 0;                                                                           \
         }
-        c = rev_ap;
-        for (k = 0; k < 2u; k++) {
-            int32_t o = c[fx.ap_i[k]];
-            int32_t v = a + (o >> 1);
-            c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);
-            a = o - a;
-            if (++fx.ap_i[k] >= REV_AP[k])
-                fx.ap_i[k] = 0;
-            c += REV_AP[k];
+        for (i = 0; i < n; i++) {
+            int32_t a = 0, sd = 0, al = 0, ar = 0, in = mulq15(rev_in[i], 2050);
+            RV_CM(c0, i0, l0, 0, q0, r0, n0, +=)
+            RV_CM(c1, i1, l1, 1, q1, r1, n1, -=)
+            RV_CM(c2, i2, l2, 2, q2, r2, n2, +=)
+            RV_CM(c3, i3, l3, 3, q3, r3, n3, -=)
+            if (wd) {
+                sd = (sd * wd) >> 7;
+                fx_sl[i] += sd;
+                fx_sr[i] -= sd;
+            }
+            if (air) {                                   /* the air: its middle under the tail, its side */
+                out[i] += (al + ar) >> 3;
+                sd = ((al - ar) * air) >> 6;
+                fx_sl[i] += sd;
+                fx_sr[i] -= sd;
+            }
+            RV_AP2(p0, a0, 0)
+            RV_AP2(p1, a1, 1)
+            out[i] += a;
         }
-        out[i] += a;
+#undef RV_CM
+#undef RV_AP2
+        fx.comb_i[0] = (uint16_t)i0; fx.comb_i[1] = (uint16_t)i1; fx.comb_i[2] = (uint16_t)i2; fx.comb_i[3] = (uint16_t)i3;
+        rl_i[0] = (uint16_t)r0; rl_i[1] = (uint16_t)r1; rl_i[2] = (uint16_t)r2; rl_i[3] = (uint16_t)r3;
+        fx.ap_i[0] = (uint16_t)a0; fx.ap_i[1] = (uint16_t)a1;
+        fx.comb_lp[0] = l0; fx.comb_lp[1] = l1; fx.comb_lp[2] = l2; fx.comb_lp[3] = l3;
     }
     for (k = 0; k < 4u; k++)
         fx.rm_m[k] = m1[k];                             /* (exact at the block's end) */
 }
+/* ROOM (G_RTYPE 0): 4 damped combs (each an allpass in its loop, 0.9.14) + 2 allpasses (Freeverb-like, mono), added
+ * to out; (0.9.14) the plain loop it had (the same arithmetic without the moving reads) gone for flash: MOD 0 reads at
+ * offsets 0, bit for bit the same */
+static void rev_room(const int32_t *rev_in, int32_t *out, uint32_t n) { rev_room_mod(rev_in, out, n, 0, 0, 0); }
 
 /* (0.6.70) SPRING's chain shortened / lengthened (LOAD): the stages coming back start silent, not with what they held */
 static __attribute__((noinline)) void sp_chain(int32_t *ap, uint32_t ns)
@@ -1038,9 +1043,10 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
             int32_t x = (rev_in[i] >> 1) + mulq15(shim_fb[i], fb) + mulq15(fx.cl_lp, fg);
             cl_dc += ((x << 8) - cl_dc) >> 9;            /* (0.9.14) a low cut (~14 Hz, Q8) in the loop: ROOM's floors */
             x -= (cl_dc + 128) >> 8;                     /* gave it a DC that went round for ever (RMS ~1700 at SIZE 126) */
-            if (fx.cl_w & 1u)
-                cloud_buf[(fx.cl_w >> 1) & (CL_LEN - 1u)] = (int16_t)rv_knee((fx.cl_half + x) >> 1);
-            else
+            if (fx.cl_w & 1u) {
+                int32_t v = (fx.cl_half + x) >> 1;
+                cloud_buf[(fx.cl_w >> 1) & (CL_LEN - 1u)] = (int16_t)((uint32_t)(v + 24576) <= 49152u ? v : rv_knee(v));
+            } else
                 fx.cl_half = x;
             fx.cl_w++;
         }
@@ -1114,7 +1120,7 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         }
     }
     if (song.g[G_RMOD] || wd)
-        rev_room_mod(g, t, n, wd * 2);                   /* (its side x2 as well: the network at half the level) */
+        rev_room_mod(g, t, n, wd * 2, song.g[G_RMOD], 0);                   /* (its side x2 as well: the network at half the level) */
     else
         rev_room(g, t, n);
     for (i = 0; i < n; i++) {
@@ -1122,27 +1128,42 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         shim_fb[i] = t[i];                               /* (the tail into the line, next block) */
     }
 }
-/* (0.9.14 proposal) HALL (G_RTYPE 5): a feedback delay network, stereo. After the FDN reverbs of Jot and of SLOOP
- * (isod89's fx.c, GPL-3.0: two diffusers then four lines mixed by a Hadamard matrix, one line modulated), grown to
- * the memory JIANT already has idle while ROOM-type models run: four input allpasses (Dattorro's diffusion, his
- * lengths x 1.48 for 44.1 kHz) -> eight int16 lines of 29 .. 70 ms (coprime) -> each its one-pole damping (DAMP) ->
- * an 8 x 8 Hadamard (a fast Walsh-Hadamard: 24 adds, x 1/sqrt 8) -> each line's own gain for the same RT60 (SIZE: 0.25
- * .. ~8.5 s; a longer line loses more a pass) -> + the input (signs alternating) -> back. Lines 0 and 4 read at a
- * slowly moving point (quadrature sines at RATE, 8 .. 40 samples deep with MOD): no metallic ring on long tails.
- * Out: two orthogonal sign patterns of the eight lines, left and right (decorrelated: the depth), their middle into
- * the bus, their side WIDE-scaled (0: 100 %, as two rooms apart; 127: 150 %) into fx_sl / fx_sr. PRE: the pre-delay as on ROOM.
- * Memory: none of its own. The lines live in rev_x past the pre-delay's 2048 (CLOUD's line, idle: one model at a
- * time) and in rev_comb (ROOM's combs, idle): 21,186 of the 21,319 samples there. */
-#define HL_M 40                                          /* the modulated lines' swing (+-, samples) */
+/* (0.9.14 proposal) HALL (G_RTYPE 5): early bounces, then a diffuse tank, stereo. After Jot's feedback delay networks,
+ * Dattorro's plate (diffusers inside the loop) and SLOOP's FDN (isod89's fx.c, GPL-3.0).
+ *  - Bounces: the send into a 93 ms line (ROOM's comb memory, idle), eight taps 7 .. 66 ms, mutually
+ *    prime, alternately left and right, softer the later. They go out and into the tank (its diffusion makes their
+ *    echoes noisy, as off real walls).
+ *  - Both at half the rate (FS / 2: half the work, twice the time in the same memory). Tank: the input (two samples
+ *    averaged) -> four allpasses (Dattorro's diffusion) -> four lines of 105 .. 166 ms, each an allpass (11 .. 18 ms,
+ *    g 0.5) inside the loop then its delay (all lengths prime: no common period) -> one-pole damping (DAMP) -> a 4 x 4
+ *    conference matrix (orthogonal, its diagonal 0: no line feeds itself, no loop's own period comes back: the boing a
+ *    Hadamard gives) -> each line's own gain for one RT60 (SIZE: 0.25 .. 8.5 s) -> back. SIZE also the room: the
+ *    lines read up to 55 % nearer at SIZE 0 (gliding), so a small one does not slap.
+ *    Movement: lines 0 and 2 read at points moving by two mixes of sines of incommensurate rates (RATE, x 1.62):
+ *    never quite periodic, 3 .. 11 half-rate samples deep with MOD (well under a cent).
+ *  - Out: line ends and taps a quarter along them in two orthogonal patterns, left and right, back to the full rate by a linear
+ *    step (as CLOUD's grains); the middle into the bus, the side WIDE-scaled (0: 100 %, 127: 150 %). PRE as on ROOM.
+ * Memory: none of its own: rev_x past the pre-delay's 2048 (CLOUD's line, idle) and rev_comb (ROOM's, idle). */
+#define HL_M 11                                          /* the moving reads' swing (+-, half-rate samples) */
 #define HL_X (2u * HL_M + 2u)                            /* .. their extra length */
-static const uint16_t HL_LEN[8] = {1301 + HL_X, 1567, 1871, 2243, 2647 + HL_X, 3089, 2161, 2753};
-static const uint16_t HL_AP[4] = {210, 159, 562, 411};
-static const int16_t HL_APG[4] = {24576, 24576, 20480, 20480};      /* 0.75 0.75 0.625 0.625 (Dattorro) */
-#define HL_XAP (RPRE_LEN)                                /* rev_x: the pre-delay, the diffusers, lines 0..5 */
-#define HL_XL0 (HL_XAP + 210u + 159u + 562u + 411u)
-_Static_assert(HL_XL0 + 1301u + 1567u + 1871u + 2243u + 2647u + 3089u + 2u * HL_X <= CL_LEN, "HALL's lines in rev_x");
-_Static_assert(2161u + 2753u <= sizeof rev_comb / 2u, "HALL's lines 6, 7 in rev_comb");
-static struct { uint16_t li[8], ai[4]; int32_t lp[8]; uint32_t ph; int32_t m0, m1; } hl;
+static const uint16_t HL_DIF[4] = {107, 79, 277, 211};
+static const int16_t HL_DIFG[4] = {24576, 24576, 20480, 20480};      /* 0.75 0.75 0.625 0.625 (Dattorro) */
+static const uint16_t HL_D[4] = {2311 + HL_X, 2753, 3191 + HL_X, 3659};
+static const uint16_t HL_A[4] = {241, 293, 337, 389};
+static const uint16_t HL_ER[8] = {157, 251, 397, 523, 683, 907, 1153, 1447};   /* (half-rate samples: 7 .. 66 ms, primes) */
+static const int16_t HL_ERG[8] = {22000, 20000, 17500, 15500, 13000, 11000, 9000, 7500};
+#define HL_ERN 2048u                                     /* the bounces' line (rev_comb), a power of two */
+#define HL_XDIF (RPRE_LEN)                               /* rev_x: the pre-delay, the diffusers, the lines, their allpasses */
+#define HL_XD0 (HL_XDIF + 107u + 79u + 277u + 211u)
+#define HL_XA0 (HL_XD0 + 2311u + 2753u + 3191u + 3659u + 2u * HL_X)
+_Static_assert(HL_XA0 + 241u + 293u + 337u + 389u <= CL_LEN, "HALL's tank in rev_x");
+_Static_assert(HL_ERN <= sizeof rev_comb / 2u, "HALL's bounces in rev_comb");
+static struct {
+    uint32_t ew, ph1, ph2;
+    uint16_t fi[4], di[4], ai[4];
+    int32_t lp[4], m[2], xh, pl, pr, so[4];          /* .. so: SIZE's read-ahead on each line (Q8, glides) */
+    uint8_t odd;
+} hl;
 /* 2^-x, x Q16 (>= 0), Q15 */
 static int32_t exp2n_q15(uint32_t x)
 {
@@ -1155,80 +1176,106 @@ static int32_t exp2n_q15(uint32_t x)
     y -= (((((f * f) >> 15) * f) >> 15) * 1491) >> 15;
     return y >> i;
 }
+#define HL_SAT(v) ((int16_t)((uint32_t)((v) + 24576) <= 49152u ? (v) : rv_knee(v)))   /* (the knee out of line) */
+/* an allpass on buffer p (length L, its index *ix), coefficient g (out of line: flash) */
+static __attribute__((noinline)) int32_t hl_ap(int16_t *p, uint32_t L, uint16_t *ix, int32_t g, int32_t x)
+{
+    uint32_t j = *ix;
+    int32_t ob = p[j], v = x + mulq15(ob, g);
+    p[j] = HL_SAT(v);
+    *ix = (uint16_t)(j + 1u >= L ? 0u : j + 1u);
+    return ob - mulq15(v, g);
+}
 static __attribute__((noinline)) void rev_hall(const int32_t *rev_in, int32_t *out, uint32_t n)
 {
-    int16_t *ln[8], *ap[4];
-    int32_t g[8], kd = 32767 - GFX(GF_RDAMP) * 210, wd = 128 + song.g[G_RWIDE] / 2, m0, m1, dm0, dm1;
-    int32_t depth = (8 + song.g[G_RMOD] / 4) << 8;     /* Q8 samples */
+    int16_t *ln[4], *ap[4], *df[4], *er = rev_comb;
+    int32_t g[4], kd = 32767 - GFX(GF_RDAMP) * 210, wd = 128 + song.g[G_RWIDE] / 2, m1[2], dm[2];
+    int32_t depth = (3 + song.g[G_RMOD] / 16) << 8, dso[4];   /* Q8 half-rate samples */
     uint32_t i, k, s = (uint32_t)GFX(GF_RSIZE);
-    {   /* SIZE -> RT60 T = 0.25 s x 2^(SIZE / 25) (0.25 .. 8.5 s); a line of L samples loses 2^-(9.966 L / (FS T)) a pass:
-         * x = 39.86 L / FS x 2^(-SIZE / 25), Q16 */
+    {   /* SIZE -> RT60 T = 0.25 s x 2^(SIZE / 25); a loop of L half-rate samples: 2^-(9.966 L / (FS / 2 T)) a pass,
+         * x 1/2 (the Hadamard 4 normalised) */
         int32_t q = exp2n_q15(s * 65536u / 25u);
-        for (k = 0; k < 8u; k++) {
-            uint32_t L = HL_LEN[k] - (k == 0u || k == 4u ? HL_M + 1u : 0u);   /* (the mean delay) */
-            uint32_t x = (uint32_t)(((uint64_t)L * 2612494u / FS * (uint32_t)q) >> 15);   /* (39.864 Q16 = 2612494) */
-            g[k] = exp2n_q15(x);
+        for (k = 0; k < 4u; k++) {              /* SIZE also the room: the lines read up to 55 % nearer at SIZE 0 */
+            int32_t t = (int32_t)(((uint32_t)HL_D[k] * (127u - s) * 284u) >> 8);   /* (Q8: 0.55 L at 0) */
+            uint32_t L;
+            if (!hl.so[k]) hl.so[k] = t + 1;
+            dso[k] = clamp(t + 1 - hl.so[k], -2048, 2048) >> (CTL_LOG2 - 1u);   /* (8 samples a block at most; n is CTL) */
+            L = HL_D[k] + HL_A[k] - ((k & 1u) ? 0u : HL_M + 1u) - (uint32_t)((hl.so[k] + (dso[k] << (CTL_LOG2 - 1u))) >> 8);
+            g[k] = mulq15(exp2n_q15((L * 474u * ((uint32_t)q >> 5)) >> 12), 18919);   /* (39.86 x 2 / FS Q16 = 118.5 = 474 / 4;
+                                                         * x 1/sqrt 3) */
         }
     }
-    {   /* the lines' places */
-        int16_t *b = rev_x.cl + HL_XL0;
-        for (k = 0; k < 6u; k++) { ln[k] = b; b += HL_LEN[k]; }
-        ln[6] = rev_comb;
-        ln[7] = rev_comb + HL_LEN[6];
-        b = rev_x.cl + HL_XAP;
-        for (k = 0; k < 4u; k++) { ap[k] = b; b += HL_AP[k]; }
-    }
-    hl.ph += LFO_INC[song.g[G_RRATE] & 127];
-    m1 = (depth + ((osc_sine(hl.ph) * depth) >> 15)) + (1 << 8);              /* Q8: 1 .. 2 depth + 1 */
-    m0 = hl.m0 ? hl.m0 : m1;
     {
-        int32_t q1 = (depth + ((osc_sine(hl.ph + 0x40000000u) * depth) >> 15)) + (1 << 8), q0 = hl.m1 ? hl.m1 : q1;
-        dm0 = (m1 - m0) / (int32_t)n;
-        dm1 = (q1 - q0) / (int32_t)n;
-        hl.m0 = m1; hl.m1 = q1;
-        m1 = q0;
+        int16_t *b = rev_x.cl + HL_XDIF;
+        for (k = 0; k < 4u; k++) { df[k] = b; b += HL_DIF[k]; }
+        for (k = 0; k < 4u; k++) { ln[k] = b; b += HL_D[k]; }
+        for (k = 0; k < 4u; k++) { ap[k] = b; b += HL_A[k]; }
     }
-    for (k = 0; k < 8u; k++)
-        g[k] = mulq15(g[k], 11585);                      /* (x 1/sqrt 8: the Hadamard normalised, folded in) */
+    {   /* the movement: two sines at RATE and 1.62 x RATE, mixed two ways */
+        uint32_t inc = LFO_INC[song.g[G_RRATE] & 127];
+        int32_t a, b;
+        hl.ph1 += inc;
+        hl.ph2 += inc + (inc >> 1) + (inc >> 3);
+        a = osc_sine(hl.ph1);
+        b = osc_sine(hl.ph2);
+        m1[0] = (a * 5 + b * 3) >> 3;
+        m1[1] = (b * 5 - a * 3) >> 3;
+        for (k = 0; k < 2u; k++) {
+            m1[k] = depth + ((m1[k] * depth) >> 15) + 256;   /* Q8: 1 .. 2 depth + 1 */
+            if (!hl.m[k]) hl.m[k] = m1[k];
+            dm[k] = (m1[k] - hl.m[k]) >> (CTL_LOG2 - 1u);
+        }
+    }
     for (i = 0; i < n; i++) {
-        int32_t x = rev_in[i] >> 3, o[8], y[8], l = 0, r = 0, sd;
-        for (k = 0; k < 4u; k++) {                       /* the diffusers */
-            int16_t *p = ap[k] + hl.ai[k];
-            int32_t ob = *p, v = x + mulq15(ob, HL_APG[k]);
-            *p = (int16_t)((uint32_t)(v + 24576) <= 49152u ? v : rv_knee(v));   /* (the knee out of line) */
-            x = ob - mulq15(v, HL_APG[k]);
-            if (++hl.ai[k] >= HL_AP[k]) hl.ai[k] = 0;
-        }
-        m0 += dm0; m1 += dm1;
-        for (k = 0; k < 8u; k++) {
-            uint32_t L = HL_LEN[k], j0 = hl.li[k];
-            if (!(k & 3u)) {                             /* lines 0, 4: read ahead of the oldest by m (Q8): shorter */
-                int32_t m = k ? m1 : m0, j1;
-                j0 += (uint32_t)m >> 8;
-                if (j0 >= L) j0 -= L;
-                j1 = j0 + 1u >= L ? 0 : (int32_t)j0 + 1;
-                o[k] = ln[k][j0] + (((ln[k][j1] - ln[k][j0]) * (m & 255)) >> 8);
-            } else
-                o[k] = ln[k][j0];
-            hl.lp[k] += mulq15(o[k] - hl.lp[k], kd);     /* the damping */
-            y[k] = hl.lp[k];
-            l += (k & 1u) ? -o[k] : o[k];                /* out: two orthogonal sign patterns */
-            r += (k & 2u) ? -o[k] : o[k];
-        }
-        for (k = 1; k < 8u; k <<= 1) {                   /* Hadamard 8, in place (a fast Walsh-Hadamard) */
-            uint32_t q;
-            for (q = 0; q < 8u; q++)
-                if (!(q & k)) {
-                    int32_t a = y[q], b = y[q | k];
-                    y[q] = a + b;
-                    y[q | k] = a - b;
+        int32_t x = rev_in[i] >> 3, tl, tr, l, r, sd;
+        if (hl.odd) {                                    /* a half-rate step: the bounces, the tank */
+            int32_t xd = (hl.xh + x) >> 1, el = 0, err = 0, o[4], tv[4], a, b, c, d;
+            er[hl.ew & (HL_ERN - 1u)] = HL_SAT(xd);     /* the bounces */
+            for (k = 0; k < 8u; k++) {
+                int32_t v = mulq15(er[(hl.ew - HL_ER[k]) & (HL_ERN - 1u)], HL_ERG[k]);
+                if (k & 1u) err += v; else el += v;
+            }
+            hl.ew++;
+            xd += (el + err) >> 2;                       /* (the bounces into the tank too) */
+            for (k = 0; k < 4u; k++)
+                xd = hl_ap(df[k], HL_DIF[k], &hl.fi[k], HL_DIFG[k], xd);
+            hl.m[0] += dm[0]; hl.m[1] += dm[1];
+            for (k = 0; k < 4u; k++) {                   /* read ahead of the oldest by SIZE's offset (+ lines 0, 2: */
+                int32_t m = (hl.so[k] += dso[k]) + ((k & 1u) ? 0 : hl.m[k >> 1]);   /* (the movement), Q8: shorter */
+                o[k] = rv_mread(ln[k], hl.di[k], HL_D[k], m);
+                hl.lp[k] += mulq15(o[k] - hl.lp[k], kd); /* the damping */
+            }
+            a = hl.lp[0]; b = hl.lp[1]; c = hl.lp[2]; d = hl.lp[3];
+            {   /* the mix: a conference matrix (orthogonal / sqrt 3, its diagonal 0): no line feeds itself, so no loop's
+                 * own period comes back (a Hadamard 4 sends half of each line straight round again: the boing) */
+                int32_t y[4] = {b + c + d, c - a - d, d - a - b, b - a - c};
+                for (k = 0; k < 4u; k++) {               /* gain, + input, the allpass inside the loop, the delay */
+                    uint32_t q = hl.di[k] + HL_D[k] - HL_D[k] / 4u;   /* (the tap a quarter along: out, below) */
+                    tv[k] = ln[k][q >= HL_D[k] ? q - HL_D[k] : q];
+                    int32_t v = mulq15(y[k], g[k]) + ((k & 1u) ? -xd : xd);
+                    v = hl_ap(ap[k], HL_A[k], &hl.ai[k], 16384, v);
+                    ln[k][hl.di[k]] = HL_SAT(v);
+                    if (++hl.di[k] >= HL_D[k]) hl.di[k] = 0;
                 }
+            }
+            {   /* out: the line ends and taps a quarter along lines 1 / 3 (left), 0 / 2 (right): the tank heard from
+                 * ~50 ms, filling in behind the bounces; the bounces over it */
+                int32_t cl = o[0] - o[1] + o[2] - o[3] + tv[1] - tv[3];
+                int32_t cr = o[0] + o[1] - o[2] - o[3] + tv[0] - tv[2];
+                cl = (cl + el) * 2;                      /* (x 2: the level of ROOM's tail) */
+                cr = (cr + err) * 2;
+                tl = (cl + hl.pl) >> 1;                  /* (this sample: half way from the last) */
+                tr = (cr + hl.pr) >> 1;
+                hl.pl = cl; hl.pr = cr;
+            }
+        } else {
+            hl.xh = x;
+            tl = hl.pl;
+            tr = hl.pr;
         }
-        for (k = 0; k < 8u; k++) {                       /* each its gain, + the input (signs alternating) */
-            int32_t v = mulq15(y[k], g[k]) + ((k & 1u) ? -x : x);
-            ln[k][hl.li[k]] = (int16_t)((uint32_t)(v + 24576) <= 49152u ? v : rv_knee(v));
-            if (++hl.li[k] >= HL_LEN[k]) hl.li[k] = 0;
-        }
+        hl.odd ^= 1u;
+        l = tl;
+        r = tr;
         out[i] += (l + r) >> 1;                          /* (the middle: the bus's level near ROOM's) */
         sd = (((l - r) >> 1) * wd) >> 7;
         fx_sl[i] += sd;
@@ -1245,8 +1292,7 @@ static void rev_run(uint32_t ty, const int32_t *rev_in, int32_t *out, uint32_t n
     case 4: rev_cloud(rev_in, out, n); break;
     case 5: rev_hall(rev_in, out, n); break;
     default:
-        if (song.g[G_RMOD] || song.g[G_RWIDE]) rev_room_mod(rev_in, out, n, song.g[G_RWIDE]);
-        else rev_room(rev_in, out, n);
+        rev_room_mod(rev_in, out, n, song.g[G_RWIDE], song.g[G_RMOD], 128 + song.g[G_RWIDE]);   /* (0.9.14: its air) */
         break;
     }
 }
@@ -1270,6 +1316,7 @@ static void rev_state_clear(void)
     fx.cl_gl = fx.cl_gr = 0;
     cl_dc = 0;
     memset(&hl, 0, sizeof hl);                          /* (HALL's indices, damping, modulation) */
+    memset(rl_ap, 0, sizeof rl_ap);                     /* (ROOM's allpasses in the loops) */
     fx.cl_lp = fx.cl_half = 0;                          /* (0.8.4: CLOUD's tone and odd sample too; its tone's state
                                                          * was kept, a residue back into the next CLOUD's line) */
 }
@@ -1372,8 +1419,11 @@ static void fx_gate(int32_t *wet, uint32_t n)
     if (g0 == 32767 && fxg_g == 32767)
         return;
     d = (fxg_g - g0) / (int32_t)n;
-    for (i = 0; i < n; i++, g0 += d)
-        wet[i] = mulq15(wet[i], g0);
+    for (i = 0; i < n; i++, g0 += d) {                  /* (0.9.14) the sides too: ROOM's air and HALL always have one, */
+        wet[i] = mulq15(wet[i], g0);                    /* and their residue must close with the rest */
+        fx_sl[i] = mulq15(fx_sl[i], g0);
+        fx_sr[i] = mulq15(fx_sr[i], g0);
+    }
 }
 /* (0.8.4) the long delay, lighter: past what the line holds at the full rate, it runs at half the rate (up to twice
  * as long), past that at a quarter (four times), as CLOUD's line and the reverb's pre-delay do at half rate. The input
@@ -2495,10 +2545,15 @@ static __attribute__((noinline)) void mix_block(int32_t *out, uint32_t n)   /* (
         pfx_end();                                      /* (DEC- / DEC+ back) */
     if (perf)
         perf_pre(mix_l, mix_r, sl_l, sl_r, send_d, send_r, n);   /* (THROW: the SLICER's bus too) */
-    for (i = 0; i < n; i++) {                           /* (0.6.75) the buses' return and sides (the block before's sends); */
+    {   /* (0.9.14) SLICER FX ON: the buses' sides through it too, as their return (ROOM's air always has a side) */
+        int32_t *ql = !fx_stems && slicer_fx() ? sl_l : mix_l, *qr = !fx_stems && slicer_fx() ? sl_r : mix_r;
+        for (i = 0; i < n; i++) {
+            ql[i] += fx_sl[i];
+            qr[i] += fx_sr[i];
+        }
+    }
+    for (i = 0; i < n; i++) {                           /* (0.6.75) the buses' return (the block before's sends); */
         wet[i] = fx_wet[i];                             /* this block's sends for the next */
-        mix_l[i] += fx_sl[i];
-        mix_r[i] += fx_sr[i];
         fxq_c[i] = send_c[i];
         fxq_d[i] = send_d[i];
         fxq_r[i] = send_r[i];

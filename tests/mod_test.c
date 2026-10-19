@@ -85,9 +85,14 @@ static void fresh(uint32_t e, uint32_t pi)        /* the boot state (no FX tails
     memset(cho_buf, 0, sizeof cho_buf);
     memset(rev_comb, 0, sizeof rev_comb);
     memset(rev_ap, 0, sizeof rev_ap);
+    rev_clear();                                     /* (0.9.14: ROOM's allpasses in its loops, HALL's state) */
+    memset(fx_sl, 0, sizeof fx_sl); memset(fx_sr, 0, sizeof fx_sr); memset(fx_wet, 0, sizeof fx_wet);   /* (.. and the
+                                                     * buses' last block: ROOM's side, a block behind) */
     memset(&fx, 0, sizeof fx);
     memset(fxq_c, 0, sizeof fxq_c); memset(fxq_d, 0, sizeof fxq_d); memset(fxq_r, 0, sizeof fxq_r);   /* (0.6.75: the buses' queued sends) */
     lim_env = LIM_T; lev_env = 0; lev_g = lev_cur = 32768; lev_dg = 0;
+    lc_l1 = lc_l2 = lc_r1 = lc_r2 = dc_l = dc_r = dce_l = dce_r = 0;   /* (0.9.14: the master's low cut and DC block, left and
+                                                     * right: the test before may end wide now, ROOM has a side) */
     memset(mp_seen, 0, sizeof mp_seen); memset(dist_w, 0, sizeof dist_w);      /* (0.6.8: LEVEL / PAN glide, DST blend; 0.6.9: AUTO PAN) */
     memset(ap_ph, 0, sizeof ap_ph); memset(ap_free, 0, sizeof ap_free); memset(ap_sh, 0, sizeof ap_sh);
     memset(trk, 0, sizeof trk);
@@ -1167,10 +1172,10 @@ static void test_jiant_fx(void)
         check("MSEQ: STEP reads the level of the step now (LEN wraps), SLEW glides to it", ok);
     }
     fresh(0, 0);
-    trk[0].p[P_DLY] = 110; trk[0].p[P_CHOR] = 0; song.g[G_WIDTH] = 0;
+    trk[0].p[P_DLY] = 110; trk[0].p[P_CHOR] = 0; trk[0].p[P_REV] = 0; song.g[G_WIDTH] = 0;   /* (0.9.14: ROOM has a side) */
     h0 = phrase_lr(&d0);
     fresh(0, 0);
-    trk[0].p[P_DLY] = 110; trk[0].p[P_CHOR] = 0; song.g[G_WIDTH] = 127;
+    trk[0].p[P_DLY] = 110; trk[0].p[P_CHOR] = 0; trk[0].p[P_REV] = 0; song.g[G_WIDTH] = 127;
     h1 = phrase_lr(&d1);
     check("WIDTH 0: the delay mono (left = right, to a rounding); 127: left and right apart",
           d0 <= 4 && d1 > 1000 && h0 != h1);   /* (0.6.75: one sample 1 apart, the master's rounding of L and R) */
