@@ -306,6 +306,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "REVERB TYPE: ROOM bit-identical, SPRING decay / chirp / stability / level, model change, cost, demos" "$OUT/reverb_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/cloud_hot_test" tests/cloud_hot_test.c -lm
     run "CLOUD driven hot: the loop never runs away (any SIZE / RATE), its line never clamps, no grain across the write head, no trip" "$OUT/cloud_hot_test" build/fx_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/hall_test" tests/hall_test.c -lm
+    run "HALL (0.9.14 proposal): RT60 with SIZE, wider and denser than ROOM (against SLOOP's FDN), level, bounded, demos" "$OUT/hall_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/delay_test" tests/delay_test.c -lm
     run "DELAY: no leak at the far end, the long times at half / quarter rate (timing, response, aliases, noise), no click on a rate change, MOD / GRAIN / FEEDBK there, demos" "$OUT/delay_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm

@@ -477,7 +477,7 @@ static void test_switch(void)
 static void switch_chain(const uint8_t *seq, uint32_t nseq)
 {
     static int32_t c[CTL], d[CTL], r[CTL], w[CTL];
-    static const char *const NM[5] = {"ROOM", "SPRING", "SHIMMER", "RESO", "CLOUD"};
+    static const char *const NM[6] = {"ROOM", "SPRING", "SHIMMER", "RESO", "CLOUD", "HALL"};
     uint32_t b, i, k = 0, sw = (FS + FS / 5u) / CTL, ph = FS * 3u / 20u / CTL;   /* (the input 1 s; the first change 0.2 s
                                                              * later, then one every 0.15 s) */
     int32_t prev = 0, step = 0, own = 0, after = 0;
@@ -489,12 +489,12 @@ static void switch_chain(const uint8_t *seq, uint32_t nseq)
     fx.dly_lp = fx.dly_hp = 0;
     song.g[G_RSIZE] = 110; song.g[G_RDAMP] = 40; song.g[G_RMOD] = 40; song.g[G_RRATE] = 64; song.g[G_RWIDE] = 0;
     song.g[G_RFILT] = 0;
-    song.g[G_RTYPE] = seq[0]; song.g[G_RPRE] = seq[0] <= 1u ? 60 : 0;
+    song.g[G_RTYPE] = seq[0]; song.g[G_RPRE] = seq[0] <= 1u || seq[0] == 5u ? 60 : 0;
     fx.rtype = seq[0];
     for (b = 0; b < sw + nseq * ph; b++) {
         if (b >= sw && (b - sw) % ph == 0u && ++k < nseq) {
             song.g[G_RTYPE] = seq[k];
-            song.g[G_RPRE] = seq[k] <= 1u ? 60 : 0;
+            song.g[G_RPRE] = seq[k] <= 1u || seq[k] == 5u ? 60 : 0;
         }
         for (i = 0; i < CTL; i++) {
             c[i] = d[i] = 0;
@@ -520,17 +520,17 @@ static void switch_chain(const uint8_t *seq, uint32_t nseq)
 }
 static void test_switch_all(void)
 {
-    static const uint8_t CH[4][3] = {{4, 3, 0}, {4, 0, 4}, {2, 1, 2}, {0, 4, 1}};
+    static const uint8_t CH[6][3] = {{4, 3, 0}, {4, 0, 4}, {2, 1, 2}, {0, 4, 1}, {5, 4, 5}, {4, 5, 0}};   /* (0.9.14: HALL) */
     uint8_t s[2];
     uint32_t a, b;
     printf("reverb: (0.8.4) model changes through the shared line (rev_x):\n");
-    for (a = 0; a < 5u; a++)
-        for (b = 0; b < 5u; b++)
+    for (a = 0; a < 6u; a++)
+        for (b = 0; b < 6u; b++)
             if (a != b) {
                 s[0] = (uint8_t)a; s[1] = (uint8_t)b;
                 switch_chain(s, 2);
             }
-    for (a = 0; a < 4u; a++)
+    for (a = 0; a < 6u; a++)
         switch_chain(CH[a], 3);
     song.g[G_RTYPE] = 0; song.g[G_RPRE] = 0; song.g[G_RMOD] = 0;
     rev_clear();

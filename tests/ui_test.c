@@ -3586,7 +3586,9 @@ static int test_layer(void)
          cur_page()->id[2] == G_RDAMP && song.g[G_RTYPE] == 0;
     turn(EN_K1, 1);
     ok &= song.g[G_RTYPE] == 1 && str_eq(GP[G_RTYPE].names[song.g[G_RTYPE]], "SPRING");
-    turn(EN_K1, 5);                                  /* (JIANT 0.5: SHIMR RESO CLOUD after it) */
+    turn(EN_K1, 5);                                  /* (JIANT 0.5: SHIMR RESO CLOUD after it; 0.9.14: HALL last) */
+    ok &= song.g[G_RTYPE] == 5 && str_eq(GP[G_RTYPE].names[5], "HALL");
+    turn(EN_K1, -1);
     ok &= song.g[G_RTYPE] == 4 && str_eq(GP[G_RTYPE].names[4], "CLOUD");
     song.playing = 0;
     project_save(2);

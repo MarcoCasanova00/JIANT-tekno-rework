@@ -435,7 +435,7 @@ static volatile uint8_t fx_usb_fixed;
  * or a computer whose input clips at the full level (usb.c uac_tap reads it) */
 static volatile int32_t fx_usb_gain = 4096;
 #define UAC_GAIN() fx_usb_gain
-static const uint8_t REV_LITE[3][5] = {{0, 1, 2, 3, 4}, {0, 1, 0, 1, 0}, {1, 1, 1, 1, 1}};   /* (0.6.29) LOAD FULL, LITE, ECO
+static const uint8_t REV_LITE[3][6] = {{0, 1, 2, 3, 4, 5}, {0, 1, 0, 1, 0, 0}, {1, 1, 1, 1, 1, 1}};   /* (0.6.29) LOAD FULL, LITE, ECO
                                                          * (voice.c sys_load): each reverb's lighter kin */
 #define MASTER_FULL 4096                /* main.c: the MASTER knob's top, Q12 */
 /* the MASTER pot (ADC 0..1023, smoothed in main.c) to its level, square law: 0 .. 4088 (Q12) */
@@ -1122,6 +1122,119 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         shim_fb[i] = t[i];                               /* (the tail into the line, next block) */
     }
 }
+/* (0.9.14 proposal) HALL (G_RTYPE 5): a feedback delay network, stereo. After the FDN reverbs of Jot and of SLOOP
+ * (isod89's fx.c, GPL-3.0: two diffusers then four lines mixed by a Hadamard matrix, one line modulated), grown to
+ * the memory JIANT already has idle while ROOM-type models run: four input allpasses (Dattorro's diffusion, his
+ * lengths x 1.48 for 44.1 kHz) -> eight int16 lines of 29 .. 70 ms (coprime) -> each its one-pole damping (DAMP) ->
+ * an 8 x 8 Hadamard (a fast Walsh-Hadamard: 24 adds, x 1/sqrt 8) -> each line's own gain for the same RT60 (SIZE: 0.25
+ * .. ~8.5 s; a longer line loses more a pass) -> + the input (signs alternating) -> back. Lines 0 and 4 read at a
+ * slowly moving point (quadrature sines at RATE, 8 .. 40 samples deep with MOD): no metallic ring on long tails.
+ * Out: two orthogonal sign patterns of the eight lines, left and right (decorrelated: the depth), their middle into
+ * the bus, their side WIDE-scaled (0: 100 %, as two rooms apart; 127: 150 %) into fx_sl / fx_sr. PRE: the pre-delay as on ROOM.
+ * Memory: none of its own. The lines live in rev_x past the pre-delay's 2048 (CLOUD's line, idle: one model at a
+ * time) and in rev_comb (ROOM's combs, idle): 21,186 of the 21,319 samples there. */
+#define HL_M 40                                          /* the modulated lines' swing (+-, samples) */
+#define HL_X (2u * HL_M + 2u)                            /* .. their extra length */
+static const uint16_t HL_LEN[8] = {1301 + HL_X, 1567, 1871, 2243, 2647 + HL_X, 3089, 2161, 2753};
+static const uint16_t HL_AP[4] = {210, 159, 562, 411};
+static const int16_t HL_APG[4] = {24576, 24576, 20480, 20480};      /* 0.75 0.75 0.625 0.625 (Dattorro) */
+#define HL_XAP (RPRE_LEN)                                /* rev_x: the pre-delay, the diffusers, lines 0..5 */
+#define HL_XL0 (HL_XAP + 210u + 159u + 562u + 411u)
+_Static_assert(HL_XL0 + 1301u + 1567u + 1871u + 2243u + 2647u + 3089u + 2u * HL_X <= CL_LEN, "HALL's lines in rev_x");
+_Static_assert(2161u + 2753u <= sizeof rev_comb / 2u, "HALL's lines 6, 7 in rev_comb");
+static struct { uint16_t li[8], ai[4]; int32_t lp[8]; uint32_t ph; int32_t m0, m1; } hl;
+/* 2^-x, x Q16 (>= 0), Q15 */
+static int32_t exp2n_q15(uint32_t x)
+{
+    uint32_t i = x >> 16;
+    int32_t f = (int32_t)((x & 0xFFFFu) >> 1), y;         /* Q15 */
+    if (i >= 15u) return 0;
+    /* 2^-f on [0,1): 1 - 0.69147 f + 0.23697 f^2 - 0.04550 f^3 (within 0.0002) */
+    y = 32768 - ((f * 22658) >> 15);
+    y += (((f * f) >> 15) * 7765) >> 15;
+    y -= (((((f * f) >> 15) * f) >> 15) * 1491) >> 15;
+    return y >> i;
+}
+static __attribute__((noinline)) void rev_hall(const int32_t *rev_in, int32_t *out, uint32_t n)
+{
+    int16_t *ln[8], *ap[4];
+    int32_t g[8], kd = 32767 - GFX(GF_RDAMP) * 210, wd = 128 + song.g[G_RWIDE] / 2, m0, m1, dm0, dm1;
+    int32_t depth = (8 + song.g[G_RMOD] / 4) << 8;     /* Q8 samples */
+    uint32_t i, k, s = (uint32_t)GFX(GF_RSIZE);
+    {   /* SIZE -> RT60 T = 0.25 s x 2^(SIZE / 25) (0.25 .. 8.5 s); a line of L samples loses 2^-(9.966 L / (FS T)) a pass:
+         * x = 39.86 L / FS x 2^(-SIZE / 25), Q16 */
+        int32_t q = exp2n_q15(s * 65536u / 25u);
+        for (k = 0; k < 8u; k++) {
+            uint32_t L = HL_LEN[k] - (k == 0u || k == 4u ? HL_M + 1u : 0u);   /* (the mean delay) */
+            uint32_t x = (uint32_t)(((uint64_t)L * 2612494u / FS * (uint32_t)q) >> 15);   /* (39.864 Q16 = 2612494) */
+            g[k] = exp2n_q15(x);
+        }
+    }
+    {   /* the lines' places */
+        int16_t *b = rev_x.cl + HL_XL0;
+        for (k = 0; k < 6u; k++) { ln[k] = b; b += HL_LEN[k]; }
+        ln[6] = rev_comb;
+        ln[7] = rev_comb + HL_LEN[6];
+        b = rev_x.cl + HL_XAP;
+        for (k = 0; k < 4u; k++) { ap[k] = b; b += HL_AP[k]; }
+    }
+    hl.ph += LFO_INC[song.g[G_RRATE] & 127];
+    m1 = (depth + ((osc_sine(hl.ph) * depth) >> 15)) + (1 << 8);              /* Q8: 1 .. 2 depth + 1 */
+    m0 = hl.m0 ? hl.m0 : m1;
+    {
+        int32_t q1 = (depth + ((osc_sine(hl.ph + 0x40000000u) * depth) >> 15)) + (1 << 8), q0 = hl.m1 ? hl.m1 : q1;
+        dm0 = (m1 - m0) / (int32_t)n;
+        dm1 = (q1 - q0) / (int32_t)n;
+        hl.m0 = m1; hl.m1 = q1;
+        m1 = q0;
+    }
+    for (k = 0; k < 8u; k++)
+        g[k] = mulq15(g[k], 11585);                      /* (x 1/sqrt 8: the Hadamard normalised, folded in) */
+    for (i = 0; i < n; i++) {
+        int32_t x = rev_in[i] >> 3, o[8], y[8], l = 0, r = 0, sd;
+        for (k = 0; k < 4u; k++) {                       /* the diffusers */
+            int16_t *p = ap[k] + hl.ai[k];
+            int32_t ob = *p, v = x + mulq15(ob, HL_APG[k]);
+            *p = (int16_t)((uint32_t)(v + 24576) <= 49152u ? v : rv_knee(v));   /* (the knee out of line) */
+            x = ob - mulq15(v, HL_APG[k]);
+            if (++hl.ai[k] >= HL_AP[k]) hl.ai[k] = 0;
+        }
+        m0 += dm0; m1 += dm1;
+        for (k = 0; k < 8u; k++) {
+            uint32_t L = HL_LEN[k], j0 = hl.li[k];
+            if (!(k & 3u)) {                             /* lines 0, 4: read ahead of the oldest by m (Q8): shorter */
+                int32_t m = k ? m1 : m0, j1;
+                j0 += (uint32_t)m >> 8;
+                if (j0 >= L) j0 -= L;
+                j1 = j0 + 1u >= L ? 0 : (int32_t)j0 + 1;
+                o[k] = ln[k][j0] + (((ln[k][j1] - ln[k][j0]) * (m & 255)) >> 8);
+            } else
+                o[k] = ln[k][j0];
+            hl.lp[k] += mulq15(o[k] - hl.lp[k], kd);     /* the damping */
+            y[k] = hl.lp[k];
+            l += (k & 1u) ? -o[k] : o[k];                /* out: two orthogonal sign patterns */
+            r += (k & 2u) ? -o[k] : o[k];
+        }
+        for (k = 1; k < 8u; k <<= 1) {                   /* Hadamard 8, in place (a fast Walsh-Hadamard) */
+            uint32_t q;
+            for (q = 0; q < 8u; q++)
+                if (!(q & k)) {
+                    int32_t a = y[q], b = y[q | k];
+                    y[q] = a + b;
+                    y[q | k] = a - b;
+                }
+        }
+        for (k = 0; k < 8u; k++) {                       /* each its gain, + the input (signs alternating) */
+            int32_t v = mulq15(y[k], g[k]) + ((k & 1u) ? -x : x);
+            ln[k][hl.li[k]] = (int16_t)((uint32_t)(v + 24576) <= 49152u ? v : rv_knee(v));
+            if (++hl.li[k] >= HL_LEN[k]) hl.li[k] = 0;
+        }
+        out[i] += (l + r) >> 1;                          /* (the middle: the bus's level near ROOM's) */
+        sd = (((l - r) >> 1) * wd) >> 7;
+        fx_sl[i] += sd;
+        fx_sr[i] -= sd;
+    }
+}
 /* the model ty's block into out */
 static void rev_run(uint32_t ty, const int32_t *rev_in, int32_t *out, uint32_t n)
 {
@@ -1130,6 +1243,7 @@ static void rev_run(uint32_t ty, const int32_t *rev_in, int32_t *out, uint32_t n
     case 2: rev_shimmer(rev_in, out, n); break;
     case 3: rev_reso(rev_in, out, n); break;
     case 4: rev_cloud(rev_in, out, n); break;
+    case 5: rev_hall(rev_in, out, n); break;
     default:
         if (song.g[G_RMOD] || song.g[G_RWIDE]) rev_room_mod(rev_in, out, n, song.g[G_RWIDE]);
         else rev_room(rev_in, out, n);
@@ -1155,6 +1269,7 @@ static void rev_state_clear(void)
         cl_g[i].len = 0;
     fx.cl_gl = fx.cl_gr = 0;
     cl_dc = 0;
+    memset(&hl, 0, sizeof hl);                          /* (HALL's indices, damping, modulation) */
     fx.cl_lp = fx.cl_half = 0;                          /* (0.8.4: CLOUD's tone and odd sample too; its tone's state
                                                          * was kept, a residue back into the next CLOUD's line) */
 }
@@ -1177,7 +1292,8 @@ static __attribute__((noinline)) void rev_line_clear(uint32_t n)
  * ROOM, SPRING and RESO nothing, the pre-delay's line runs on as it always has */
 static uint32_t rev_line_dirty(uint32_t from, uint32_t to)
 {
-    return to == 4u ? CL_LEN : to == 2u ? SH_LEN : from == 2u || from == 4u ? RPRE_LEN : 0u;
+    return to == 4u || to == 5u ? CL_LEN : to == 2u ? SH_LEN : from == 2u || from == 4u ? RPRE_LEN : 0u;   /* (HALL: its
+                                                         * lines in it, past the pre-delay's part, which it keeps) */
 }
 /* every buffer and state of the reverb silenced (fx_trip, the tests) */
 static void rev_clear(void)
@@ -1584,7 +1700,7 @@ static inline __attribute__((always_inline)) void fx_buses(const int32_t *cho_in
         rev_in = rpre_out;
     } else
         fx.rt1 = fx.rt2 = 0;
-    if (song.g[G_RPRE] > 0 && song.g[G_RTYPE] <= 1 && fx.rtype <= 1u) {   /* (JIANT) the reverb's pre-delay (in place;
+    if (song.g[G_RPRE] > 0 && (song.g[G_RTYPE] <= 1 || song.g[G_RTYPE] == 5) && (fx.rtype <= 1u || fx.rtype == 5u)) {   /* (JIANT) the reverb's pre-delay (in place;
                                                          * RESO: PITCH; 0.6.12: SHIMMER, CLOUD: AIR). (0.8.4) Its line in
                                                          * rev_x: not in a change's block from SHIMMER or CLOUD (their
                                                          * line is there until the change clears it); else the same */
@@ -1688,7 +1804,7 @@ static inline __attribute__((always_inline)) void fx_buses(const int32_t *cho_in
             fx_sr[i] -= side;
         }
     }
-    rt = (uint32_t)song.g[G_RTYPE] <= 4u ? song.g[G_RTYPE] : 0;
+    rt = (uint32_t)song.g[G_RTYPE] <= 5u ? song.g[G_RTYPE] : 0;
     rt = REV_LITE[LOAD_EFF() % 3u][rt];                   /* (0.6.29) LOAD LITE: SHIMMER, CLOUD as ROOM, RESO as SPRING; ECO:
                                                          * all SPRING */
     if (rt != fx.rtype) {                               /* the model changed: the old one's block fades out, */
