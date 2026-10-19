@@ -691,6 +691,16 @@ static uint32_t delay_samples(void)
     return s < 16u ? 16u : s > DLY_MAX ? DLY_MAX : s;
 }
 
+/* (0.9.14) the reverbs' int16 lines (ROOM's combs and allpasses, CLOUD's line) written through a soft knee: linear to -2.5 dBFS (bit for bit as before there), then tanh up to
+ * ~-0.1 dB: a hot send (DIST, CLIP, four parts at once) rounds off like tape, never a hard clamp in the loop */
+static inline int32_t rv_knee(int32_t x)
+{
+    int32_t a = x < 0 ? -x : x;
+    if (a <= 24576)
+        return x;
+    a = 24576 + (softclip(clamp(a - 24576, 0, 16384) * 4) >> 2);
+    return x < 0 ? -a : a;
+}
 /* (JIANT 0.5) the combs' feedback from SIZE: 0.76 .. 0.99, the top of the knob a long tail (was 0.957 at most) */
 static int32_t rev_size(void)
 {
@@ -998,7 +1008,10 @@ static __attribute__((noinline)) void rev_reso(const int32_t *rev_in, int32_t *o
     }
 }
 #define CL_N 12u                                         /* (its line, CL_LEN: rev_x, at the top) */
+#define CL_WMAX 512                                      /* (0.9.14) the grains' windows summed: 2 grains' worth at most */
+#define CL_BACK (CL_LEN - 6000u - 1024u)                 /* .. the farthest back a grain may start (rev_cloud) */
 static struct { uint32_t pos, inc; uint16_t len, age; int16_t pl, pr; } cl_g[CL_N];
+static int32_t cl_dc;                                    /* (0.9.14) CLOUD's loop: its DC (Q8 samples) */
 static uint32_t cl_rand(void) { fx.cl_rng = fx.cl_rng * 1664525u + 1013904223u; return fx.cl_rng >> 8; }
 /* CLOUD (G_RTYPE 4, JIANT 0.5, made wet in 0.5.1): a granular wash. The input and the cloud's own tail fed back
  * (SIZE: the tail ~0.09, the grains ~0.43: the wash builds on itself) are written at half rate into a 0.74 s line;
@@ -1023,8 +1036,10 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         int32_t l = 0, r = 0, m;
         if (!freeze) {                                   /* the line: the input and the tail, two samples into one */
             int32_t x = (rev_in[i] >> 1) + mulq15(shim_fb[i], fb) + mulq15(fx.cl_lp, fg);
+            cl_dc += ((x << 8) - cl_dc) >> 9;            /* (0.9.14) a low cut (~14 Hz, Q8) in the loop: ROOM's floors */
+            x -= (cl_dc + 128) >> 8;                     /* gave it a DC that went round for ever (RMS ~1700 at SIZE 126) */
             if (fx.cl_w & 1u)
-                cloud_buf[(fx.cl_w >> 1) & (CL_LEN - 1u)] = (int16_t)clamp((fx.cl_half + x) >> 1, -32768, 32767);
+                cloud_buf[(fx.cl_w >> 1) & (CL_LEN - 1u)] = (int16_t)rv_knee((fx.cl_half + x) >> 1);
             else
                 fx.cl_half = x;
             fx.cl_w++;
@@ -1039,6 +1054,10 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
                 pan = pan * wd >> 7;
                 uint32_t inc = (uint32_t)(((uint64_t)(PITCH[pk] >> 1) * ar) >> 16), back;
                 cl_g[k].len = (uint16_t)(2000u + cl_rand() % 4200u);
+                if (inc > 32768u && (((uint64_t)cl_g[k].len * (inc - 32768u)) >> 16) > CL_BACK)   /* (0.9.14) AIR up: */
+                    cl_g[k].len = (uint16_t)(((uint64_t)CL_BACK << 16) / (inc - 32768u));   /* shorter, so that
+                                                         * it fits behind the write head (past CL_BACK the span below
+                                                         * went negative: grains read across the write, a click each) */
                 back = inc > 32768u ? (uint32_t)(((uint64_t)cl_g[k].len * (inc - 32768u)) >> 16) : 0u;   /* (faster than
                                                          * the line is written: started that much further back) */
                 cl_g[k].pos = ((fx.cl_w >> 1) - 200u - back - cl_rand() % (CL_LEN - 6000u - back)) << 16;
@@ -1052,7 +1071,7 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         if (!(i & 1u)) {                                 /* (0.6.12) the grains every other sample, as the line is
                                                          * written (half rate): half the work; in between, the two
                                                          * averaged (a linear step, half a sample late) */
-            int32_t gl = 0, gr = 0;
+            int32_t gl = 0, gr = 0, ws = 0;
             for (k = 0; k < CL_N; k++) {
                 if (!cl_g[k].len) continue;
                 {
@@ -1060,6 +1079,7 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
                     int32_t x0 = cloud_buf[p & (CL_LEN - 1u)], x1 = cloud_buf[(p + 1u) & (CL_LEN - 1u)];
                     int32_t x = x0 + (((x1 - x0) * (int32_t)f) >> 8), w = (int32_t)((a < L - a ? a : L - a) * 2u * 256u / L);
                     x = (x * w) >> 8;
+                    ws += w;
                     gl += (x * cl_g[k].pl) >> 7;
                     gr += (x * cl_g[k].pr) >> 7;
                     cl_g[k].pos += cl_g[k].inc << 1;
@@ -1067,6 +1087,11 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
                     if (cl_g[k].age >= cl_g[k].len) cl_g[k].len = 0;
                 }
             }
+            if (ws > CL_WMAX) {                          /* (0.9.14) the overlap at most CL_WMAX / 256 grains' worth: */
+                int32_t q = (CL_WMAX << 13) / ws;        /* the windows' sum grows with RATE (up to 12 grains), and */
+                gl = ((gl >> 2) * q) >> 13;              /* x SIZE's feedback (0.43) it passed 1 from RATE ~90 (any */
+                gr = ((gr >> 2) * q) >> 13;              /* SIZE at 127): the line ran away into its clamps, the */
+            }                                            /* crackle. Now the loop's gain <= 0.43 x 2: it always dies */
             l = (gl + fx.cl_gl) >> 1;
             r = (gr + fx.cl_gr) >> 1;
             fx.cl_gl = gl;
@@ -1077,9 +1102,10 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         }
         m = (l + r) >> 1;
         fx.cl_lp = m + mulq15(fx.cl_lp - m, 32767 - dk);
-        g[i] = fx.cl_lp * 2;                             /* (into the network: its input is 1/8 at -4 dB) */
+        g[i] = fx.cl_lp;                                 /* (into the network; 0.9.14: at half the level it was, x2 at
+                                                         * its output: 6 dB more room before ROOM's int16 lines bend) */
         if (air > 0)                                     /* (AIR up: the grains' highs lifted) */
-            g[i] += ((m - fx.cl_lp) * air) / 12;
+            g[i] += ((m - fx.cl_lp) * air) / 24;
         t[i] = 0;
         if (wd) {                                        /* the grains' own place, left and right (a side) */
             int32_t sd = ((l - r) * wd) >> 9;
@@ -1088,11 +1114,11 @@ static __attribute__((noinline)) void rev_cloud(const int32_t *rev_in, int32_t *
         }
     }
     if (song.g[G_RMOD] || wd)
-        rev_room_mod(g, t, n, wd);
+        rev_room_mod(g, t, n, wd * 2);                   /* (its side x2 as well: the network at half the level) */
     else
         rev_room(g, t, n);
     for (i = 0; i < n; i++) {
-        out[i] += t[i] + (t[i] >> 1) + (g[i] >> 2);      /* the bloom (+3.5 dB, 0.5.1), the grains themselves under it */
+        out[i] += t[i] * 3 + (g[i] >> 1);                /* the bloom (+3.5 dB, 0.5.1), the grains themselves under it */
         shim_fb[i] = t[i];                               /* (the tail into the line, next block) */
     }
 }
@@ -1128,6 +1154,7 @@ static void rev_state_clear(void)
     for (i = 0; i < CL_N; i++)
         cl_g[i].len = 0;
     fx.cl_gl = fx.cl_gr = 0;
+    cl_dc = 0;
     fx.cl_lp = fx.cl_half = 0;                          /* (0.8.4: CLOUD's tone and odd sample too; its tone's state
                                                          * was kept, a residue back into the next CLOUD's line) */
 }

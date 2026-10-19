@@ -304,6 +304,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "FX layer effects: on the 1/16, stereo, too-long REPEAT, SLICER, silent keys, idle bit-identical, clicks, cost, demos" "$OUT/perform_test" build/perform_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/reverb_test" tests/reverb_test.c -lm
     run "REVERB TYPE: ROOM bit-identical, SPRING decay / chirp / stability / level, model change, cost, demos" "$OUT/reverb_test" build/fx_demo
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/cloud_hot_test" tests/cloud_hot_test.c -lm
+    run "CLOUD driven hot: the loop never runs away (any SIZE / RATE), its line never clamps, no grain across the write head, no trip" "$OUT/cloud_hot_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/delay_test" tests/delay_test.c -lm
     run "DELAY: no leak at the far end, the long times at half / quarter rate (timing, response, aliases, noise), no click on a rate change, MOD / GRAIN / FEEDBK there, demos" "$OUT/delay_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
