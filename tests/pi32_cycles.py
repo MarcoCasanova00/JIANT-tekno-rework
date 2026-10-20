@@ -277,19 +277,43 @@ FORCE = {int(a, 16): tk for v, tk in (("PI32_TAKE", True), ("PI32_FALL", False))
          for a in os.environ.get(v, "").split(",") if a}
 
 
+def div_ahead(insns, idx, k, stop):
+    """a divide in insns[k:stop] (the code a forward branch skips), or in the block the first unconditional jump
+    there leads to (a rare case laid out of line, DSP_RARE), up to that block's own first branch"""
+    def isdiv(i):
+        return i.kind == "div" or (i.bundle is not None and i.bundle.kind == "div")
+    jump = None
+    for i in insns[k:stop]:
+        if isdiv(i):
+            return True
+        if jump is None and i.kind == "br" and not i.cond and i.target in idx:
+            jump = idx[i.target]
+    if jump is None:
+        return False
+    for i in insns[jump:]:
+        if isdiv(i):
+            return True
+        if i.kind in ("br", "jt", "ret", "call"):
+            return False
+    return False
+
+
 def path(insns, h, e, spans):
     """the straight path of one iteration of the loop (h, e): forward branches not taken, an unconditional jump
     inside the span followed, the back edge taken. Returns [(Insn, taken)] and the inner loops passed"""
     idx = {i.addr: k for k, i in enumerate(insns)}
     k = idx.get(h)
-    out, inner, steps = [], [], 0
+    out, inner, steps, seen, out_of_line = [], [], 0, set(), False
     while k is not None and k < len(insns) and steps < 4000:
         steps += 1
         i = insns[k]
         if i.nst == -1:         # a bundle tail: walked with its head
             k += 1
             continue
-        if i.addr > e:
+        if i.addr in seen:      # (round again through a block laid out of line: the iteration ends)
+            return out, inner
+        seen.add(i.addr)
+        if i.addr > e and not out_of_line:
             break
         for (h2, e2) in spans:      # an inner loop's head: noted (its back edge is not taken on this path)
             if h2 == i.addr and (h2, e2) != (h, e) and h < h2 <= e2 <= e and (h2, e2) not in inner:
@@ -304,18 +328,25 @@ def path(insns, h, e, spans):
             if i.target == h and (i.addr == e or not i.cond):
                 out.append((i, True))
                 return out, inner
-            if i.cond and i.target > i.addr and h <= i.target <= e and any(
-                    x.kind == "div" for x in insns[k + 1:idx.get(i.target, k + 1)]):
+            if i.cond and i.target > i.addr and i.target in idx and div_ahead(insns, idx, k + 1, idx[i.target]):
                 out.append((i, True))       # a guard around a divide (a polyBLEP edge, a zero test): taken, the
                 k = idx.get(i.target)       # divide rare (the code's own rule: none per sample)
+                continue
+            if i.cond and out_of_line and h <= i.target <= e:   # (the way back into the loop)
+                out.append((i, True))
+                k = idx.get(i.target)
+                out_of_line = False
                 continue
             if i.cond:
                 out.append((i, False))
                 k += 1
                 continue
-            if h <= i.target <= e and i.target > i.addr:      # a jump forward inside the loop
-                out.append((i, True))
-                k = idx.get(i.target)
+            if (h <= i.target <= e and i.target > i.addr) or i.target in idx and i.target not in seen \
+                    and not any(h2 <= i.target <= e2 for h2, e2 in spans if (h2, e2) != (h, e) and
+                                not (h <= h2 and e2 <= e)):
+                out.append((i, True))   # a jump forward inside the loop, or to a block of the loop laid out of
+                k = idx.get(i.target)   # line (before the head or after its back edge: DSP_RARE's cases)
+                out_of_line = not (h <= i.target <= e)
                 continue
             out.append((i, True))       # out of the loop, or back to an outer head: the iteration ends
             return out, inner
