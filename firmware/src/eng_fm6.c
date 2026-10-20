@@ -81,7 +81,7 @@ static int fm6_slot_ok(int32_t s)
  * attenuation: the gain is (256 - it) / 256 (0: none, the power-on value). The factory patches stay under it */
 #define FM6_TRIM_REF (1 << 26)
 static uint8_t fm6_trim[NTRK], fm6_tgen[NTRK];
-static uint8_t fm6_trim_keep;                    /* bit tr: the new patch is an edit of the last (ui_fm6op.c): its trim stays */
+static uint8_t fm6_trim_keep[NTRK];              /* per part: edits keep trim; separate bytes avoid cross-core RMW */
 
 /* ------------------------------------------------------- patch formats --- */
 /* the highest value of each byte of the 155-byte voice */
@@ -422,9 +422,9 @@ static void fm6_block(track_t *t)       /* once a block and part: the macros, th
     fm6_sync(t);
     if (fm6_tgen[tr] != fm6_pgen[tr]) {                 /* a new patch: its own trim, from none (an edit: kept) */
         fm6_tgen[tr] = fm6_pgen[tr];
-        if (!((fm6_trim_keep >> tr) & 1u))
+        if (!fm6_trim_keep[tr])
             fm6_trim[tr] = 0;
-        fm6_trim_keep &= (uint8_t)~(1u << tr);
+        fm6_trim_keep[tr] = 0;
     }
     fm6_lfo_v[tr] = fm6_lfo_sample(&fm6_lfo[tr]);
     fm6_lfo_d[tr] = fm6_lfo_delay(&fm6_lfo[tr]);

@@ -107,7 +107,8 @@ static int fm1_core1_fault_c(const uint32_t *f)   /* 1: core 1's, core 0 resumes
     uint32_t cpu = fm1_cnum(), dbg = FM1_DBG_MSG;
     if (!cpu && ((dbg & FM1_DBG_C0) || !(dbg & FM1_DBG_C1) || fm1_core1_fault.count >= 16u))
         return 0;                                   /* core 0's own (or a hold that did not take): the crash report */
-    fm1_core1_stop();
+    if (!cpu)
+        fm1_core1_stop();                            /* core 1 publishes its fault and waits; core 0 performs the hold */
     fm1_core1_fault.cpu = cpu;
     fm1_core1_fault.dbg = dbg;
     fm1_core1_fault.pc = f[16];

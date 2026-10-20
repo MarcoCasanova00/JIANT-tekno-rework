@@ -201,6 +201,9 @@ static void con_status(void)
     con_puts("\r\n");
     con_kv("uptime_ms", (int32_t)fm1_ms);
     con_kv("cpu_pct", (int32_t)(song.cpu_q8 * 100u / 256u));
+    con_kv("supply_valid", fm1_supply.valid);
+    con_kv("sysvdd_mv", fm1_supply.valid ? fm1_supply.sysvdd_mv : -1);
+    con_kv("vdc14_mv", fm1_supply.valid ? fm1_supply.vdc14_mv : -1);
     con_kv("audio_max_us", (int32_t)felucca_dbg.max_us);
     con_kv("audio_late", (int32_t)felucca_dbg.late);
     con_kv("voices_shed", (int32_t)shed_count);

@@ -77,6 +77,17 @@ static void fm1_p33_write(uint32_t a, uint8_t d) { fm1__p33_op(0, a, d); }
 static void fm1_p33_or(uint32_t a, uint8_t d) { fm1__p33_op(1, a, d); }
 static void fm1_p33_and(uint32_t a, uint8_t d) { fm1__p33_op(2, a, d); }
 
+/* Read-only startup diagnostics; the regulator levels are never changed here. Snapshot before IRQs start. */
+static struct { uint16_t sysvdd_mv, vdc14_mv; uint8_t valid; } fm1_supply;
+static void fm1_supply_snapshot(void)
+{
+    uint32_t errors = fm1_p33_timeouts;
+    uint32_t sys = fm1_p33_read(0x09u) & 15u, vdc = fm1_p33_read(0x06u) & 7u;
+    fm1_supply.valid = (uint8_t)(fm1_p33_timeouts == errors);
+    fm1_supply.sysvdd_mv = (uint16_t)(930u + 30u * sys);
+    fm1_supply.vdc14_mv = (uint16_t)(1250u + 50u * vdc);
+}
+
 /* ------------------------------------------------------------ watchdog --- */
 #define FM1_P3_WDT_CON 0x80u
 #define FM1_P3_VLD_KEEP 0x17u
@@ -110,12 +121,7 @@ static void fm1_reset_reason(void)
 /* (JIANT 0.6.71) hold the second core (C1_CON 0x1EEE004: bit 1 holds it, bit 3 lets it run; the SDK's, as Melodee and
  * fm1-x0x have it): before every reset and update, and first thing at boot, so it never runs over RAM being cleared
  * or handed back to the boot loader. Harmless when it is not running */
-static inline void fm1_core1_stop(void)
-{
-    *(volatile uint32_t *)0x1EEE004u |= 2u;
-    *(volatile uint32_t *)0x1EEE004u &= ~8u;
-    __asm__ volatile("csync" ::: "memory");
-}
+#include "fm1_core1_stop.h"
 
 /* (JIANT 0.9.12) the core clock is JieLi's 320 MHz (PLL2's multiplier 240, field + 2; the boot stage's 360: 270):
  * MENU > ABOUT. hal/fm1_clk320.h switches it */

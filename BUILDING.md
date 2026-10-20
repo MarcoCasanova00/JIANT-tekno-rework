@@ -100,6 +100,25 @@ cost (`tests/cpu_baseline.txt`, `tests/target_budget.txt`). After an intended ch
 the sound, `GOLDEN_UPDATE=1 sh tests/run_tests.sh` rewrites the hashes; `BUDGET_UPDATE=1`
 does the same for the cost files.
 
+## Multicore host checks
+
+The host suite also checks the core-1 stop register sequence with mocked registers and renders the real mixer
+with a deferred worker, a concurrent pthread worker and injected delays. The renders and shared random state
+must match serial mode; a lost job must disable further jobs. To run these checks independently after generating
+`build/gen`:
+
+```
+cc -O2 -o build/host/core1_stop_test tests/core1_stop_test.c
+build/host/core1_stop_test
+cc -O2 -w -pthread -Ibuild/gen -Ifirmware/src -o build/host/mc_thread_test tests/mc_thread_test.c -lm
+python3 tests/mc_thread_test.py build/host/mc_thread_test
+```
+
+Add `-g -fsanitize=thread` to the mixer compile command to check concurrent accesses with ThreadSanitizer.
+These host checks do not validate DMA timing or the target register behavior on a physical FM-1.
+The USB serial `status` output includes a read-only startup snapshot (`supply_valid`, `sysvdd_mv`, `vdc14_mv`);
+it does not change regulator settings or measure the voltage electrically.
+
 ## Install
 
 Use the web installer in Chrome or Edge:

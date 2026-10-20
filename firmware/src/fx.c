@@ -2158,6 +2158,7 @@ static __attribute__((noinline)) void perf_master(int32_t *out, uint32_t n)
 #ifndef MC_HOST_JOB
 #define MC_HOST_JOB()                                    /* (tests/cpu_vg.c: core 1's job left out of core 0's count) */
 #endif
+#ifndef MC_HOST_ASYNC
 static int mc_run(void (*f)(uint32_t), uint32_t a)      /* (the host: at once, as core 1) */
 {
     if (!mc_host)
@@ -2170,6 +2171,7 @@ static int mc_run(void (*f)(uint32_t), uint32_t a)      /* (the host: at once, a
     return 1;
 }
 static int mc_wait(void) { return 0; }
+#endif
 #define mc_live() (mc_host != 0)
 #endif
 static volatile uint8_t mc_off;                          /* REC held at power-on: one core this session (main.c) */
@@ -2234,31 +2236,61 @@ static __attribute__((noinline)) void mix_part_m0(track_t *t, uint32_t n) { mix_
 #else
 #define mix_part_m0 mix_part_m
 #endif
-/* the parts for core 1 this block (a bit each): whichever core has less to do takes the dearest left. The DRUM parts
- * go together, as one (DRUM-X's kit and its IMAGE / SEND buffers are one for all): on one core or the other */
+/* Shared rng() also supplies GRAIN on core 1. A first-three-part LFO that may draw must follow the buses there.
+ * Modulated / synced rates and preset fades are conservative: their effective rate is resolved inside the part. */
+static int mc_rng_part(uint32_t i)
+{
+    const track_t *t = &trk[i];
+    uint32_t k;
+    if (i >= LFO_SHARED_RNG) return 0;
+    if (t->xf_on || t->p[P_LRATE] < 0) return 1;
+    for (k = 0; k < NMSLOT; k++)
+        if (t->p[P_M1SRC + 3u * k] && t->p[P_M1AMT + 3u * k] && t->p[P_M1DST + 3u * k] == MD_RATE)
+            return 1;
+    return t->lfo_ph + LFO_INC[t->p[P_LRATE] & 127] < t->lfo_ph;
+}
+/* The greedy measured-cost split keeps dependency groups together: DRUM's kit, VOICE's breath noise, AUTO PAN's
+ * random stream. Shared-rng LFOs follow the buses on core 1. As in SLOOP's units_split, ownership outranks cost. */
 static __attribute__((noinline)) uint32_t mc_split(uint32_t c1)   /* c1: what core 1 has already (0.6.75: the buses) */
 {
-    uint32_t i, j, c0 = 0, mask = 0, cost[NPART + 1], unit[NPART + 1], nu = 0, left = 0;
-    cost[0] = unit[0] = 0;
-    nu = 1;                                              /* (item 0: the DRUM parts) */
-    for (i = 0; i < NPART && i < trk_live; i++) {
-        uint32_t v = mc_cost(&trk[i]), c = v ? mc_tk[i] + v * MC_VW : 0u;
-        if (!c)
-            continue;
-        if (ENGINES[trk[i].engine] == &ENG_DRUM) {
-            cost[0] += c;
-            unit[0] |= 1u << i;
-        } else {
-            cost[nu] = c;
-            unit[nu++] = 1u << i;
+    uint32_t i, j, k, c0 = 0, mask = 0, fixed = 0, cost[NPART], unit[NPART], dep[3] = {0, 0, 0}, left = 0;
+    for (i = 0; i < NPART; i++) {
+        const track_t *t = &trk[i];
+        uint32_t bit = 1u << i;
+        unit[i] = bit; cost[i] = 0;
+        if (ENGINES[t->engine] == &ENG_DRUM) dep[0] |= bit;
+        if (ENGINES[t->engine] == &ENG_FORMANT) dep[1] |= bit;
+        if (t->p[P_APDEP] || t->xf_on) dep[2] |= bit;
+        if (mc_rng_part(i)) fixed |= bit;
+        /* Parts put to sleep still fade: render that transition serially, including voice_kill's counters. */
+        if (i >= trk_live)
+            for (k = 0; k < NVOICE; k++)
+                if (t->v[k].active) return (1u << NPART) - 1u;
+    }
+    for (k = 0; k < NELEM(dep); k++) {
+        uint32_t group = 0, first = NPART;
+        for (i = 0; i < NPART; i++)
+            if (unit[i] & dep[k]) {
+                if (first == NPART) first = i;
+                group |= unit[i]; unit[i] = 0;
+            }
+        if (first < NPART) unit[first] = group;
+    }
+    for (i = 0; i < NPART; i++) {
+        for (k = 0; k < NPART; k++)
+            if ((unit[i] >> k) & 1u) {
+                uint32_t v = mc_cost(&trk[k]);
+                if (v) cost[i] += mc_tk[k] + v * MC_VW;
+            }
+        if (unit[i] & fixed) {
+            mask |= unit[i]; c1 += cost[i];
+        } else if (cost[i]) {
+            left |= 1u << i;
         }
     }
-    for (i = 0; i < nu; i++)
-        if (unit[i])
-            left |= 1u << i;
     while (left) {
-        for (j = nu, i = 0; i < nu; i++)
-            if (((left >> i) & 1u) && (j == nu || cost[i] > cost[j]))
+        for (j = NPART, i = 0; i < NPART; i++)
+            if (((left >> i) & 1u) && (j == NPART || cost[i] > cost[j]))
                 j = i;
         left &= ~(1u << j);
         if (c1 < c0) {

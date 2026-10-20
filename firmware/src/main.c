@@ -257,6 +257,7 @@ static void fm1_main(void)
     felucca_dbg.prev_rst = fm1_boot.p3_rst;
     said = cpu_boot();
     cpu_clock();
+    fm1_supply_snapshot();                    /* console status: startup regulator levels, without changing them */
     fm1_input_init();
     fm1_adc_init();
     panel_init();

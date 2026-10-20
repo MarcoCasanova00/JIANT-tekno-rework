@@ -32,7 +32,11 @@
 #if FELUCCA_DUAL_CORE
 #define MC_CPU() fm1_cnum()
 #else
-static uint8_t mc_host, mc_host_cpu;     /* tests: 1 = jobs handed over (run at once); the core "running" */
+static uint8_t mc_host;
+#ifndef MC_HOST_STORAGE
+#define MC_HOST_STORAGE
+#endif
+static MC_HOST_STORAGE uint8_t mc_host_cpu; /* the concurrent host test uses thread-local core identity */
 #define MC_CPU() ((uint32_t)mc_host_cpu)
 #endif
 /* (JIANT 0.6.78) the hottest audio code in RAM, for core 0 (felucca.c FELUCCA_HOTRAM): app.ld puts these functions'

@@ -55,7 +55,7 @@ static void fop_write(uint32_t b, uint32_t v)
         return;
     memcpy(p, fm6_patch[tr], FP_SIZE);
     p[b] = (uint8_t)v;
-    fm6_trim_keep |= (uint8_t)(1u << tr);            /* (JIANT: an edit keeps the patch's trim) */
+    fm6_trim_keep[tr] = 1;                         /* (JIANT: an edit keeps the patch's trim) */
     fm6_set_patch(tr, p);
     fm6_own_ok &= (uint8_t)~(1u << tr);              /* (an own patch kept aside for SLOT: this one replaces it) */
     fm6_slot[tr] = FM6_OWN;                          /* (fm6_poll: nothing reloads over it) */
