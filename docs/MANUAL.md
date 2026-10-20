@@ -181,7 +181,8 @@ Since 0.8.5 every page wears the skin of the design the owner approved (the HTML
   and the REC dot (filled: the selected track armed; a ring: another track). In the middle what the page is of:
   **T1 · ANALOG ACID** (the track, its engine and its sound); on the song's pages (SAVE, ARRANGE, TOOLS, GLOBAL)
   **P1 NAME** (the project); on FX **T1** in orange. At the right the octave (**OCT +2**, or the song row while a song
-  plays), the **load meter** (five small bars, violet as the sound takes more of the audio time) and the battery
+  plays), the **load meter** (five small bars, violet as the sound takes more of the audio time; 0.9.19: orange for a
+moment when a note was cut for want of voices) and the battery
   (violet when USB powers it). Messages appear in the middle ("SAVED", "T1 CLEARED"...), sometimes with a second line.
 - **Cards**: the four boxes under the header are KNOB 1–4: the name small and grey on top, the value under it in white,
   and a thin violet bar under the value. The one you are turning lights orange, so it is the only colour on the cards.
@@ -870,7 +871,12 @@ track that follows LFO DEST / ENV DEST FILTER.
 
 EDIT > **VOICE**: **VOICE** POLY, MONO, LEG (legato), UNI (unison); **GLIDE**; **MODE** RATE or TIME (how glide is
 measured); **PRIO** LAST, LOW, HIGH. The six tracks share a budget of 8 voices (**12 while the second core plays**,
-0.9.12: MENU › SYSTEM › ABOUT says CORES 2); FM6 plays at most four per track, any track at most 8. (0.9.8) VOICE glides as a singer: an S-curve in
+0.9.12: MENU › SYSTEM › ABOUT says CORES 2); FM6 plays at most four per track, any track at most 8. (0.9.19) The budget
+counts what a voice costs, not how many: VOICE and FM6 voices count whole (12 of them), ANALOG, WHEEL and ANIMAL
+three quarters (16), PHASE, LOFI, NOISE and a DRUM-X hit five eighths (19). When it is full a new note takes, in order:
+a voice nobody hears any more, the quietest released tail, an extra UNISON voice, then a held note of the same track
+(never a track's lowest note or a MONO lead) and only last another track's held note. While the load is high, tails
+under −50 dB end. The header's load bars turn **orange** for a moment when a note had to be cut for room. (0.9.8) VOICE glides as a singer: an S-curve in
 pitch over the same time (the other engines: a straight line, as before).
 
 ---
@@ -2150,7 +2156,8 @@ ran mostly on the second core); FX BUSES and of them the REVERB (its type) and D
 core idle, waiting for the second); FX LAYER..CLIP; MASTER; USB+OUTPUT; CORE 1 BUSY; TIMER5 IN IT (the keyboard and USB
 interrupt inside the render) and **WHOLE HALF** (the same as AUDIO LOAD); then TIMER5 ALL, IRQ LATE US (how late the
 audio interrupt started at worst: the screen or a flash write held it), LATE HALVES, FX REST % (the time the effects
-rested: stopped they cost nothing since 0.9.14) and UI FRAMES (a second). Below: the voices sounding and the cap,
+rested: stopped they cost nothing since 0.9.14) and UI FRAMES (a second). Below: the voices sounding, how much of the
+budget they use (0.9.19: by weight, %) and the cap,
 the LOAD the sound plays, the cores and the CPU TEST. **To help tune JIANT on real
 hardware, photograph it** (two or three screens) while your song plays, and again a few seconds after STOP.
 

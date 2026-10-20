@@ -20,7 +20,7 @@ dx_layer 105
 drum_side_add 30
 drum_mix 126
 slicer_bus 819
-fm1_alnk0_irq 270
+fm1_alnk0_irq 93
 fm1_timer5_irq 33439
 ep4_tx 0
 ep4_fill 148

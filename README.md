@@ -171,7 +171,8 @@ audio CPU budget, the signature shown at power-on is 428 bytes. An instrument th
 - **More room.** With the second core doing part of the synth work, the load meter stays lower: more tracks, voices,
   FM6 and heavy reverbs before the clicks and the cut notes start. LOAD LITE / ECO are still there for the heaviest
   songs. **12 voices** (0.9.12, after [Skiff](https://github.com/illuminus5/skiff)): while the second core plays, the
-  tracks share 12 voices instead of 8 (each still at most 8; ECO 6); with one core, 8 as before.
+  tracks share 12 voices instead of 8 (each still at most 8; ECO 6); with one core, 8 as before. (0.9.19) By weight: a
+  lighter engine's voice counts less (ANALOG ¾, a drum hit ⅝), so 12 can be 16 ANALOG voices or 19 drum hits.
 - **Units that cannot run it.** On some FM-1s the second core now and then reads a word of memory wrong, more often
   under load (found by the Melodee and fm1-x0x developers). JIANT guards against it: every job carries a check word,
   and if the second core reads a wrong one, faults or does not answer in time, it is **stopped at once and the first
@@ -691,6 +692,34 @@ JIANT's modifications are distributed under the same license.
 ## Changelog
 
 Every update is listed here, newest first. (Since 0.6.80 at the end of the page: what the synth does comes first.)
+
+### v0.9.19 (in progress)
+- **Voices that last: the budget counts what they cost, the governor gives them back.** "The system runs out of voices
+  quite fast": measured on the host (`tests/voice_load_test.c`: 16 songs played 24 s on two cores, the power-on parts,
+  a pad's long release, arpeggiated chords, ratchets, PLAYHEADS, a UNISON lead, GEN HOUSE TECHNO TRANCE DNB AMBIENT JAZZ
+  IDM and EXPLORE; the load modelled from GEN's fitted costs), 0.9.18 cut **786 held notes and 3868 tails still heard**
+  in those songs; 0.9.19 **553 and 2293**, and in seven of the sixteen none at all (0.9.18: four). What was eating them:
+  - **The load governor took the voices down to 4 and kept them there.** Over 65 % three halves in a row it took a voice,
+    and it gave one back only after 0.5 s *in a row* under 60 %: a six-track song at ~60 % (the sequencer, the effects
+    and the parts' own work are most of it before any voice: ~2 % a voice) went to 4 voices in its first second and
+    never came back, every new note cutting another. Now its own line is **70 %** and that alone stops at **2/3 of the
+    cores' budget (8 of 12)**; only past 75 % (two halves in a row, was one) and the guard's sheds go to 4; and calm
+    comes back by points (a half under 60 % two, between the lines one, over 70 % none, only a hot one undoes them).
+  - **A drum hit counted as an FM6 note.** The budget is now **by weight**: VOICE and FM6 voices count whole, ANALOG
+    WHEEL ANIMAL ¾, PHASE LOFI NOISE and a DRUM-X hit ⅝ (each the host's instructions of one more voice of the
+    engine's heaviest preset, rounded up): never more CPU than 12 of the heaviest, as before, and up to 16 / 19 of the
+    lighter ones.
+  - **The oldest voice went first, loud or not.** Now what nobody hears (a tail under −60 dB, a note held at a silent
+    sustain), then the **quietest** released tail (a hit's and an FM6 note by their own level: their envelopes were
+    read as always full), an extra UNISON voice, the asking track's own held note, and only last another track's held
+    note (a pad is no longer cut by the drums); the overload guard also takes the quietest. While the load is tight,
+    tails under −50 dB end at once instead of when a note needs their room.
+  - **The header's load bars turn orange** for a moment when a note had to be cut for room; MENU › ABOUT › PROFILE's
+    VOICES line shows the budget in use (%).
+  CPU: callgrind, the same instructions a voice for every engine (eng/*: within ±2 %); the songs that now keep more
+  voices cost more (mix/v12 3925 → 4100, the CPU TEST song over 10 s 3520 → 4028 with ~15 voices instead of ~12); the
+  governor still answers past 75 % and the guard at 80 % as before. Target: the audio ISR's loops 270 → 93 (the guard's
+  search out of line). Flash +1.3 KB.
 
 ### v0.9.18
 RATCH and ARP over the steps, the components regrouped, rolls that stay where they belong, COMP showing its step, and

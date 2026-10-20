@@ -215,7 +215,9 @@ static int32_t prof_document(int32_t y, int draw)
     }
     str_cpy(b, "VOICES ", sizeof b);
     fmt_int(b + 7, (int32_t)voices_busy());
-    str_cpy(b + str_len(b), " CAP ", 6);
+    str_cpy(b + str_len(b), " ", 2);                   /* (0.9.19) the budget in use by weight, voice.c VOICE_W */
+    fmt_int(b + str_len(b), (int32_t)(voice_units() * 100u / (voice_cap() * VW_ONE)));
+    str_cpy(b + str_len(b), "% CAP ", 7);
     fmt_int(b + str_len(b), (int32_t)voice_cap());
     str_cpy(b + str_len(b), LOAD_EFF() == LOAD_ECO ? " ECO" : LOAD_EFF() ? " LITE" : " FULL", 6);
     y = menu_text(b, y + 4, T_TEXT, draw);

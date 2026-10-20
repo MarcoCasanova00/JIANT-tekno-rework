@@ -14,7 +14,8 @@
  * part with voices, GC_VOX a voice, the base and GC_REV; thousandths of the CPU TEST song, 63 % of a half on two cores)
  * times the device's factor (gen.c GC_DEV_X100, x1.6) and a +-4 % jitter (the sequencer's, the UI's interrupts), fed to
  * the governor and the guard as audio.c's shed_check does (65 % tight / over, 75 % hot, 80 % two halves: a shed).
- *   build/host/voice_load_test [TABLE]   prints the table (and checks: see vl_checks); TABLE=1 the table only */
+ *   build/host/voice_load_test [table]   the table, the checks (each scene within its limits, vl_checks); an argument: the
+ *   table only */
 #define VSTAT(ev, t, v) vs_ev((ev), (const void *)(t), (const void *)(v))
 static void vs_ev(unsigned ev, const void *t, const void *v);
 #define UI_TEST_NO_MAIN 1
@@ -30,7 +31,7 @@ static void vs_ev(unsigned ev, const void *t, const void *v);
 #define VL_AUD 328                                      /* -40 dB of full scale, Q15: a cut under it is not heard */
 #define VL_DEV 160u                                     /* gen.c GC_DEV_X100 */
 typedef struct {
-    uint32_t req[NTRK], held[NTRK], cut[NTRK], quiet[NTRK], trim[NTRK], deny[NTRK], own[NTRK], pcut[NTRK];
+    uint32_t req[NTRK], held[NTRK], hx[NTRK], thin[NTRK], cut[NTRK], quiet[NTRK], trim[NTRK], deny[NTRK], own[NTRK], pcut[NTRK];
     uint64_t busy_sum[NTRK];
     uint32_t busy_max[NTRK];
     uint64_t tot_sum, cap_sum;
@@ -40,6 +41,7 @@ typedef struct {
 } vl_t;
 static vl_t vl;
 static int vl_on;
+static uint32_t vl_asker;                               /* the track whose note asked last (VS_REQ) */
 
 static uint32_t vl_trk_of(const void *v)
 {
@@ -56,7 +58,7 @@ static void vs_ev(unsigned ev, const void *tp, const void *vp)
     int loud;
     if (!vl_on)
         return;
-    if (ev == VS_REQ) { vl.req[k]++; return; }
+    if (ev == VS_REQ) { vl.req[k]++; vl_asker = k; return; }
     if (ev == VS_DENY) { vl.deny[k]++; return; }
     if (!v || !v->active || v->stage == 4u)
         return;
@@ -65,7 +67,15 @@ static void vs_ev(unsigned ev, const void *tp, const void *vp)
     loud = v->gate || voice_level(&trk[k], v) >= VL_AUD;
     if (ev == VS_OWN) vl.own[k]++;
     if (ev == VS_POLY) { vl.pcut[k] += loud; return; }  /* (the engine's own voices all busy: not the budget) */
-    if (v->gate) vl.held[k]++;                          /* (a note cut while it is held) */
+    if (v->gate && trk_vmode(&trk[k]) != V_POLY && v != trk[k].v) {
+        vl.thin[k]++;                                   /* (an extra UNISON voice: the note goes on, thinner) */
+        return;
+    }
+    if (v->gate && !ENGINES[trk[k].engine % NENGINES]->oneshot) {   /* (a note cut while it is held: by another track,
+                                                         * the worst; a hit's gate is nothing to it: by its level) */
+        vl.held[k]++;
+        vl.hx[k] += ev == VS_SHED || k != vl_asker;
+    }
     else if (loud) vl.cut[k]++;                         /* (a release or a hit still heard) */
     else vl.quiet[k]++;
 }
@@ -166,6 +176,8 @@ static void vl_sound(uint32_t k, const char *eng, const char *pre)
     set_engine_of(t, e);
     for (i = 0; i < ENGINES[e]->npresets; i++)
         if (str_eq(ENGINES[e]->presets[i].name, pre)) { apply_preset_to(t, i); break; }
+    t->engine = t->eng_req;                              /* (at once, as the main loop's switch after its fade) */
+    t->p[P_MUTE] = 0;
 }
 /* a track's steps: len steps of DIV div, each nn notes (a chord up from root) every every steps, the rest empty */
 static void vl_steps(uint32_t k, uint32_t len, uint32_t every, uint32_t nn, const uint8_t *roots, uint32_t nr, uint32_t gate)
@@ -331,37 +343,136 @@ static uint32_t vl_tot(const uint32_t *a) { uint32_t k, s = 0; for (k = 0; k < N
 static void vl_print(const char *name)
 {
     uint32_t k;
-    printf("%-14s req %5u held %4u cut %4u quiet %4u trim %4u deny %4u own %3u pcut %4u | busy %4.1f max %2u cap %4.1f min %2u | "
+    printf("%-14s req %5u held %4u (x %4u) thin %4u cut %4u quiet %4u trim %4u deny %4u own %3u pcut %4u | busy %4.1f max %2u cap %4.1f min %2u | "
            "load %3.0f%% max %3u%% tight %3.0f%% gov<cap %3.0f%% (over %u hot %u shed %u) sheds %u late %u\n",
-           name, vl_tot(vl.req), vl_tot(vl.held), vl_tot(vl.cut), vl_tot(vl.quiet), vl_tot(vl.trim), vl_tot(vl.deny), vl_tot(vl.own), vl_tot(vl.pcut),
+           name, vl_tot(vl.req), vl_tot(vl.held), vl_tot(vl.hx), vl_tot(vl.thin), vl_tot(vl.cut), vl_tot(vl.quiet), vl_tot(vl.trim), vl_tot(vl.deny), vl_tot(vl.own), vl_tot(vl.pcut),
            (double)vl.tot_sum / vl.blocks, vl.tot_max, (double)vl.cap_sum / vl.blocks, vl.cap_min,
            (double)vl.load_sum / vl.halves, vl.load_max, 100.0 * vl.tight / vl.halves, 100.0 * vl.gov_low / vl.halves,
            vl.gov_over, vl.gov_hot, vl.gov_shed, vl.sheds, vl.late);
     for (k = 0; k < NTRK; k++)
         if (vl.req[k] || vl.busy_max[k])
-            printf("    T%u %-7s req %5u held %4u cut %4u quiet %4u trim %4u deny %4u pcut %4u | busy %4.1f max %u\n", k + 1u,
-                   vl_ename(k), vl.req[k], vl.held[k], vl.cut[k], vl.quiet[k], vl.trim[k], vl.deny[k], vl.pcut[k], (double)vl.busy_sum[k] / vl.blocks,
+            printf("    T%u %-7s req %5u held %4u (x %4u) cut %4u quiet %4u trim %4u deny %4u pcut %4u | busy %4.1f max %u\n", k + 1u,
+                   vl_ename(k), vl.req[k], vl.held[k], vl.hx[k], vl.cut[k], vl.quiet[k], vl.trim[k], vl.deny[k], vl.pcut[k], (double)vl.busy_sum[k] / vl.blocks,
                    vl.busy_max[k]);
 }
 
-static const struct { const char *name; uint32_t genre, seed; void (*f)(void); } VL_SC[] = {
-    {"POWER-ON", 0, 0, sc_poweron}, {"PAD LONG REL", 0, 0, sc_pad}, {"ARP CHORDS", 0, 0, sc_arp},
-    {"RATCHETS", 0, 0, sc_ratch}, {"PLAYHEADS", 0, 0, sc_fugue}, {"UNISON LEAD", 0, 0, sc_unison},
-    {"GEN HOUSE", 1, 7, 0}, {"GEN TECHNO", 6, 11, 0}, {"GEN TRANCE", 11, 3, 0}, {"GEN DNB", 32, 5, 0},
-    {"GEN AMBIENT", 38, 9, 0}, {"GEN JAZZ", 35, 2, 0}, {"GEN IDM", 42, 4, 0},
-    {"EXPLORE 1", GEN_EXPLORE, 101, 0}, {"EXPLORE 2", GEN_EXPLORE, 202, 0}, {"EXPLORE 3", GEN_EXPLORE, 303, 0},
+/* each scene, and its regression limits: notes cut while held (held) and tails cut while heard (cut) in 24 s, at most
+ * (0.9.19's +20 %); 0.9.18 cut (held / tails): POWER-ON 96 / 268, PAD 78 / 422, ARP 0 / 0, RATCHETS 0 / 403, PLAYHEADS
+ * 56 / 349, UNISON 65 / 448, HOUSE 90 / 220, TECHNO 63 / 332, TRANCE 250 / 548, DNB 15 / 297, AMBIENT 18 / 62, JAZZ
+ * 44 / 468, IDM 11 / 51, EXPLORE 0 / 0. TRANCE and JAZZ are past the CPU (the parts' and the effects' own cost ~65 % of
+ * a half on the model, before a voice): the governor holds them at 4, by weight now (and the quietest first) */
+static const struct { const char *name; uint32_t genre, seed; void (*f)(void); uint16_t held, cut; } VL_SC[] = {
+    {"POWER-ON", 0, 0, sc_poweron, 104, 190}, {"PAD LONG REL", 0, 0, sc_pad, 24, 418}, {"ARP CHORDS", 0, 0, sc_arp, 0, 0},
+    {"RATCHETS", 0, 0, sc_ratch, 0, 0}, {"PLAYHEADS", 0, 0, sc_fugue, 0, 0}, {"UNISON LEAD", 0, 0, sc_unison, 16, 454},
+    {"GEN HOUSE", 1, 7, 0, 12, 107}, {"GEN TECHNO", 6, 11, 0, 0, 0}, {"GEN TRANCE", 11, 3, 0, 310, 670},
+    {"GEN DNB", 32, 5, 0, 16, 287}, {"GEN AMBIENT", 38, 9, 0, 3, 15}, {"GEN JAZZ", 35, 2, 0, 173, 590},
+    {"GEN IDM", 42, 4, 0, 11, 23}, {"EXPLORE 1", GEN_EXPLORE, 101, 0, 0, 0}, {"EXPLORE 2", GEN_EXPLORE, 202, 0, 0, 0},
+    {"EXPLORE 3", GEN_EXPLORE, 303, 0, 0, 0},
 };
 #define VL_NSC (sizeof VL_SC / sizeof VL_SC[0])
 static vl_t vl_res[VL_NSC];
 
-int main(void)
+static int vl_bad;
+static void vl_check(const char *what, int ok)
 {
-    uint32_t s;
+    printf("voices: %-104s %s\n", what, ok ? "ok" : "FAIL");
+    vl_bad += !ok;
+}
+static uint32_t vl_held_gates(uint32_t k)
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < NVOICE; i++)
+        n += trk[k].v[i].active && trk[k].v[i].gate && trk[k].v[i].stage != 4u;
+    return n;
+}
+static void vl_settle(void)                             /* the sound loads' fades over (notes then start at once) */
+{
+    int32_t o[2 * CTL];
+    uint32_t b;
+    for (b = 0; b < 64u; b++) mix_block(o, CTL);
+}
+/* the allocation itself, apart from the scenes */
+static void vl_checks(void)
+{
+    uint32_t i, k, b, lost = 0, n;
+    int32_t o[2 * CTL];
+    track_t *vp = 0;
+    /* a held pad under a busy kit and FM6 chords, two cores: the pad's four notes never taken */
+    vl_fresh();
+    mc_host = 1;
+    vl_sound(4, "ANALOG", "JUNO PAD");
+    trk[4].p[P_SUS] = 127; trk[4].p[P_VOICE] = V_POLY;
+    vl_settle();
+    for (i = 0; i < 4u; i++) trk_note_on(&trk[4], R_CH[0] + 4u * i, 100);
+    for (b = 0; b < 4u * FS / CTL; b++) {
+        if (b % 24u == 0u) for (i = 0; i < 8u; i++) trk_note_on(&trk[0], DRUM_LANE_NOTE[i], 110);
+        if (b % 96u == 0u) for (i = 0; i < 3u; i++) { trk_note_off(&trk[5], R_CH[(b / 96u + 3u) % 4u] + 4u * i);
+                                                    trk_note_on(&trk[5], R_CH[b / 96u % 4u] + 4u * i, 100); }
+        mix_block(o, CTL);
+        lost += vl_held_gates(4) != 4u;
+    }
+    {
+        char w[160];
+        snprintf(w, sizeof w, "a held pad (4 notes) under 8 drum lanes struck every 17 ms and FM6 chords: never taken (%u "
+                 "blocks short)", lost);
+        vl_check(w, !lost);
+    }
+    /* by weight: 16 ANALOG voices in the two cores' 12; 12 FM6 ones */
+    vl_fresh();
+    mc_host = 1;
+    for (k = 1; k < 5u; k++) { vl_sound(k, "ANALOG", "SOFT PAD"); trk[k].p[P_SUS] = 127; trk[k].p[P_VOICE] = V_POLY; }
+    vl_settle();
+    for (k = 1; k < 5u; k++) for (i = 0; i < 5u; i++) trk_note_on(&trk[k], 48u + 3u * i + k, 100);
+    mix_block(o, CTL);
+    n = voices_busy();
+    {
+        char w[160];
+        snprintf(w, sizeof w, "by weight: four ANALOG parts asking 20 voices get %u (16) of the twelve-voice budget (0.9.18: "
+                 "12), %u of %u", n, voice_units(), VOICES_2CORE * VW_ONE);
+        vl_check(w, n == 16u && voice_units() <= VOICES_2CORE * VW_ONE);
+    }
+    /* the quietest released voice before an older loud one; the asker's own held note before another part's */
+    vl_fresh();
+    mc_host = 0;
+    for (k = 1; k < 5u; k++) { vl_sound(k, "ANALOG", "SOFT PAD"); trk[k].p[P_SUS] = 127; trk[k].p[P_VOICE] = V_POLY; }
+    vl_settle();
+    trk_note_on(&trk[1], 50, 100); trk_note_on(&trk[2], 52, 100);
+    trk_note_off(&trk[1], 50); trk_note_off(&trk[2], 52);
+    trk[1].v[0].env_out = 20000; trk[2].v[0].env_out = 50;
+    k = voice_victim(&trk[3], 0, &vp);
+    vl_check("the quietest released voice is given up first, not the oldest (0.9.18: the oldest, loud or not)",
+             vp == &trk[2] && k == 0u);
+    vl_fresh();
+    mc_host = 0;
+    for (k = 1; k < 5u; k++) { vl_sound(k, "ANALOG", "SOFT PAD"); trk[k].p[P_SUS] = 127; trk[k].p[P_VOICE] = V_POLY; }
+    vl_settle();
+    for (i = 0; i < 3u; i++) trk_note_on(&trk[1], 48u + 4u * i, 100);
+    for (i = 0; i < 3u; i++) trk_note_on(&trk[2], 60u + 4u * i, 100);
+    k = voice_victim(&trk[2], 0, &vp);
+    vl_check("held notes: the asker's own (not its lowest) before another part's", vp == &trk[2] && trk[2].v[k].note != 60u);
+    mc_host = 0;
+}
+
+int main(int argc, char **argv)
+{
+    uint32_t s, late = 0;
+    (void)argv;
     for (s = 0; s < VL_NSC; s++) {
+        char what[120];
         if (VL_SC[s].f) VL_SC[s].f(); else sc_gen(VL_SC[s].genre, VL_SC[s].seed);
         vl_play(VL_SECS);
         vl_res[s] = vl;
         vl_print(VL_SC[s].name);
+        late += vl.late;
+        if (argc > 1) continue;
+        snprintf(what, sizeof what, "%s: notes cut while held %u (at most %u), tails cut while heard %u (at most %u)",
+                 VL_SC[s].name, vl_tot(vl.held), VL_SC[s].held, vl_tot(vl.cut), VL_SC[s].cut);
+        vl_check(what, vl_tot(vl.held) <= VL_SC[s].held && vl_tot(vl.cut) <= VL_SC[s].cut);
     }
-    return 0;
+    if (argc > 1)
+        return 0;
+    vl_check("the load modelled never past a half (no late half) in any scene", !late);
+    vl_checks();
+    printf(vl_bad ? "voices: %d FAILED\n" : "voices: all passed\n", vl_bad);
+    return vl_bad != 0;
 }

@@ -186,7 +186,7 @@ Desde la 0.8.5 todas las páginas llevan la piel del diseño que aprobó el due�
   otra pista). Al medio de qué es la página: **T1 · ANALOG ACID** (la pista, su motor y su sonido); en las páginas del
   tema (SAVE, ARRANGE, TOOLS, GLOBAL) **P1 NOMBRE** (el proyecto); en FX **T1** en naranja. A la derecha la octava
   (**OCT +2**, o la fila del tema mientras suena un tema), el **medidor de carga** (cinco barritas, violetas a medida
-  que el sonido ocupa más del tiempo de audio) y la batería (violeta cuando la alimenta el USB). Los mensajes aparecen
+  que el sonido ocupa más del tiempo de audio; 0.9.19: naranjas un momento si se cortó una nota por falta de voces) y la batería (violeta cuando la alimenta el USB). Los mensajes aparecen
   al medio ("SAVED", "T1 CLEARED"...), a veces con una segunda línea.
 - **Tarjetas**: las cuatro cajas debajo del encabezado son KNOB 1–4: el nombre chico y gris arriba, el valor debajo en
   blanco y una barra violeta fina debajo del valor. La que estás girando se enciende en naranja, así es el único color
@@ -911,7 +911,13 @@ sobre la pista que sigue a LFO DEST / ENV DEST FILTER.
 
 EDIT > **VOICE**: **VOICE** POLY, MONO, LEG (legato), UNI (unísono); **GLIDE**; **MODE** RATE o TIME (cómo se mide el
 glide); **PRIO** LAST, LOW, HIGH. Las seis pistas comparten un presupuesto de 8 voces (**12 mientras toca el segundo
-núcleo**, 0.9.12: MENU › SYSTEM › ABOUT dice CORES 2); FM6 toca como máximo cuatro por pista, cualquier pista como máximo 8. (0.9.8) VOICE hace el glide como un cantante: una curva en S de la altura en el mismo tiempo (los
+núcleo**, 0.9.12: MENU › SYSTEM › ABOUT dice CORES 2); FM6 toca como máximo cuatro por pista, cualquier pista como máximo 8.
+(0.9.19) El presupuesto cuenta lo que cuesta cada voz, no cuántas son: las de VOICE y FM6 cuentan enteras (12), ANALOG,
+WHEEL y ANIMAL tres cuartos (16), PHASE, LOFI, NOISE y un golpe de DRUM-X cinco octavos (19). Lleno, una nota nueva
+toma, en orden: una voz que ya no se oye, la cola liberada más baja, una voz extra de UNISON, una nota sostenida de la
+misma pista (nunca la más grave ni el MONO) y recién al final una nota sostenida de otra pista. Con la carga alta, las
+colas bajo −50 dB terminan. Las barras de carga del encabezado se ponen **naranjas** un momento cuando hubo que cortar
+una nota por falta de voces. (0.9.8) VOICE hace el glide como un cantante: una curva en S de la altura en el mismo tiempo (los
 demás motores: una recta, como antes).
 
 ---

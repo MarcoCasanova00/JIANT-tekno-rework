@@ -28,6 +28,9 @@ static void ck(const char *what, int ok)
 
 /* ---- 1. centred: the render whose hash 0.9.0's sources give (the same code, built against them) ---- */
 #define DJF_CENTRE_090 0x8b898fe6u
+/* (0.9.19) the voice budget by weight (voice.c VOICE_W) gives up fewer of this mix's voices, and the quietest: the same
+ * render with today's budget, the filter still out of the chain (as 0.9.0's sources with that budget) */
+#define DJF_CENTRE_0919 0x147214f3u
 static int32_t centre_peak;
 static uint32_t centre_render(void)
 {
@@ -69,8 +72,8 @@ static void test_centre(void)
 {
     uint32_t h = centre_render();
     char what[120];
-    snprintf(what, sizeof what, "centred: a sequenced four-part mix (peak %d) bit for bit 0.9.0's (%08x)", centre_peak, h);
-    ck(what, h == DJF_CENTRE_090 && centre_peak > 2000);
+    snprintf(what, sizeof what, "centred: a sequenced four-part mix (peak %d) bit for bit 0.9.0's (%08x; 0.9.19's budget)", centre_peak, h);
+    ck(what, h == DJF_CENTRE_0919 && centre_peak > 2000);
     ck("centred: djf_block never ran (out of the chain)", !djf.mode && !djf.w);
 }
 

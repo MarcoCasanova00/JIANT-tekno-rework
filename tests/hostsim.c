@@ -211,7 +211,7 @@ static int tracks_demo(const char *dir, const char *name, uint32_t solo)
     const uint32_t frames = 16u * FS, bar = 2u * FS;
     char path[512];
     FILE *w;
-    uint32_t f, i, bmax = 0, clips = 0, fail = 0, clap_done = 0, lead_done = 0, keys_t = 0, keys_on = 0;
+    uint32_t f, i, bmax = 0, umax = 0, clips = 0, fail = 0, clap_done = 0, lead_done = 0, keys_t = 0, keys_on = 0;
     uint32_t clap_age = 0, clap_hits = 0xFFFFu, clap_pass = 0, kills0;
     track_t *t1 = &trk[0], *t2 = &trk[1], *t3 = &trk[2], *td = &trk[3];
     snprintf(path, sizeof path, "%s/%s", dir, name);
@@ -295,6 +295,8 @@ static int tracks_demo(const char *dir, const char *name, uint32_t solo)
         mix_block(o, CTL);
         if (busy_now() > bmax)
             bmax = busy_now();
+        if (voice_units() > umax)                   /* (0.9.19: the budget by weight, voice.c VOICE_W) */
+            umax = voice_units();
         for (i = 0; i < CTL; i++) {
             int32_t l = o[2 * i];
             if (l >= 32700 || l <= -32700)
@@ -304,7 +306,7 @@ static int tracks_demo(const char *dir, const char *name, uint32_t solo)
     }
     fclose(w);
     if (solo)
-        return bmax > NVOICE;
+        return umax > NVOICE * VW_ONE;
     {
         const step_t *s4 = &td->step[4], *l1 = &t3->step[1], *p14 = &t2->step[14];
         /* (DRUM: the clap goes into the grid, its lane's hit, seq.c; a sampled kit took it as a 4th note) */
@@ -317,9 +319,10 @@ static int tracks_demo(const char *dir, const char *name, uint32_t solo)
                ok_clap ? "ok" : "FAIL");
         printf("tracks: recording: MIDI ch 3 -> lead step 1 = %u (want 84) %s; keys -> pad step 14 = %u notes %u %u %s\n",
                l1->note[0], ok_lead ? "ok" : "FAIL", p14->n, p14->note[0], p14->note[1], ok_keys ? "ok" : "FAIL");
-        printf("tracks: voices sounding at most %u (budget %u) %s; given up to another part %u; %u samples near full "
-               "scale\n", bmax, NVOICE, bmax <= NVOICE ? "ok" : "FAIL", voice_kills - kills0, clips);
-        fail = !ok_clap + !ok_lead + !ok_keys + (bmax > NVOICE) + (clips > 0);
+        printf("tracks: voices sounding at most %u, %u of the budget's %u by weight %s; given up to another part %u; %u "
+               "samples near full scale\n", bmax, umax, NVOICE * VW_ONE, umax <= NVOICE * VW_ONE ? "ok" : "FAIL",
+               voice_kills - kills0, clips);
+        fail = !ok_clap + !ok_lead + !ok_keys + (umax > NVOICE * VW_ONE) + (clips > 0);
     }
     return (int)fail;
 }
@@ -329,18 +332,19 @@ static int tracks_demo(const char *dir, const char *name, uint32_t solo)
  * fastest of four 2 s stretches (the host's other load only ever adds). Runs in a child process
  * (a clean state each time); the result comes back through a pipe. */
 #define DRUM_HITS 0xFFu
+static uint32_t tc_units;                        /* (0.9.19) tracks_cost's last: the budget in use at most, by weight */
 static double tracks_cost(const uint8_t parts[NPART][3], uint32_t *busy_max)
 {
     int fd[2];
     pid_t pid;
-    double r[2] = {-1, 0};
+    double r[3] = {-1, 0, 0};
     if (pipe(fd))
         return -1;
     fflush(stdout);
     if (!(pid = fork())) {
         static const uint8_t NOTES[8] = {48, 52, 55, 59, 60, 64, 67, 71};
         uint64_t ns = 0, best = ~0ull, k, nblk = 8u * FS / CTL, seg = nblk / 4u;   /* the fastest of 4 x 2 s: */
-        uint32_t p, i, bm = 0;
+        uint32_t p, i, bm = 0, um = 0;
         int32_t o[2 * CTL];
         host_tracks_init();
         for (p = 0; p < NPART; p++) {
@@ -368,9 +372,12 @@ static double tracks_cost(const uint8_t parts[NPART][3], uint32_t *busy_max)
             }
             if (busy_now() > bm)
                 bm = busy_now();
+            if (voice_units() > um)
+                um = voice_units();
         }
         r[0] = (double)best / (double)(seg * CTL);
         r[1] = bm;
+        r[2] = um;
         if (write(fd[1], r, sizeof r) != sizeof r)
             _exit(1);
         _exit(0);
@@ -382,6 +389,7 @@ static double tracks_cost(const uint8_t parts[NPART][3], uint32_t *busy_max)
     waitpid(pid, 0, 0);
     if (busy_max)
         *busy_max = (uint32_t)r[1];
+    tc_units = (uint32_t)r[2];
     return r[0];
 }
 
@@ -415,6 +423,7 @@ static int steal_test(const char *dir)
         t->p[P_VOICE] = V_POLY;
         t->p[P_LEVEL] = 90;
     }
+    gov_cap = (uint8_t)(NVOICE * VOICE_W[0] / VW_ONE);   /* (0.9.19: the budget by weight: 8 ANALOG voices, as written) */
     kills0 = voice_kills;
     wav_hdr(w, frames);
     for (f = 0; f < frames; f += CTL) {
@@ -426,7 +435,8 @@ static int steal_test(const char *dir)
         if (f == FS / 2u / CTL * CTL)
             trk_note_on(&trk[1], 74, 90);          /* 8: the budget is full */
         if (ms >= 1000u && ms % 500u == 0u && f % (FS / 2u) < CTL && ms < 3500u) {
-            p = ms / 500u % 2u ? 1u : 2u;          /* parts 2, 3 in turn: each takes a voice */
+            p = 2u + (ms - 1000u) / 500u % 4u;     /* parts 3 .. 6 in turn: each takes a voice (0.9.19: a part with a
+                                                    * held note over its bass restarts its own, voice_victim) */
             trk_note_on(&trk[p], 76u + ms / 250u, 90);
         }
         mix_block(o, CTL);
@@ -451,6 +461,7 @@ static int steal_test(const char *dir)
             bad++;
     }
     (void)prev;
+    gov_cap = 16u;
     printf("tracks: stealing across parts: %u voices taken; largest sample step at a take / before it: at most %.2f x "
            "(a hard cut: several x) %s\n", voice_kills - kills0, worst, nev >= 4u && !bad ? "ok" : "FAIL");
     free(L);
@@ -814,20 +825,23 @@ static int tracks_test(const char *dir)
                                   {ENGI_DRUM, 0, DRUM_HITS}};
         uint8_t vv[NPART][3] = {{5, (uint8_t)heavy[5], 4}, {5, (uint8_t)heavy[5], 4}, {0, 0, 0}, {0, 0, 0}};
         uint8_t idle[NPART][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {ENGI_DRUM, 0, DRUM_HITS}};
-        uint32_t bm2 = 0, bm3 = 0;
+        uint32_t bm2 = 0, bm3 = 0, u1, u2, u3;
         double two_voice, none;
         four = tracks_cost(parts, &bm);
+        u1 = tc_units;
         four_full = tracks_cost(full, &bm2);
+        u2 = tc_units;
         two_voice = tracks_cost(vv, &bm3);
+        u3 = tc_units;
         none = tracks_cost(idle, 0);
         printf("tracks: worst single part: %s %s %.1f ns\n", ENGINES[worst_e]->name, ENGINES[worst_e]->presets[worst_p].name, worst);
         printf("tracks: %s + PHASE + VOICE + drums, 3 + 3 + 2 notes: %.1f ns (%.2f x the worst single part), "
                "%u voices\n", ENGINES[fm]->name, four, four / worst, bm);
-        printf("tracks: the same, 8 + 8 + 4 notes asked for (budget keeps %u): %.1f ns (%.2f x)\n", bm2, four_full,
-               four_full / worst);
+        printf("tracks: the same, 8 + 8 + 4 notes asked for (budget keeps %u, %u of %u by weight): %.1f ns (%.2f x)\n",
+               bm2, u2, NVOICE * VW_ONE, four_full, four_full / worst);
         printf("tracks: two VOICE parts, 4 + 4 voices (the heaviest 8 the budget allows): %.1f ns (%.2f x); "
                "no notes but the drums (buses, 3 idle parts): %.1f ns\n", two_voice, two_voice / worst, none);
-        if (bm > NVOICE || bm2 > NVOICE || bm3 > NVOICE)
+        if (u1 > NVOICE * VW_ONE || u2 > NVOICE * VW_ONE || u3 > NVOICE * VW_ONE)   /* (0.9.19: by weight) */
             fail++;
     }
     printf("tracks: %s\n", fail ? "FAILED" : "all checks ok");

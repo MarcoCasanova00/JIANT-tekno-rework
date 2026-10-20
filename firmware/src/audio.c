@@ -123,15 +123,16 @@ static uint8_t shed_over;                              /* bit k: the half k halv
 #define TIGHT_1C() 0                                   /* (the host: as before) */
 #endif
 static uint8_t tight_calm;                             /* halves in a row under 60 % */
-/* (0.9.13) the load governor (voice.c gov_cap, gov_lite), a half at a time: over the budget 3 halves in a row (0.9.14:
- * was 6), a voice less for all parts (4 at least: the song thins out, its oldest released voices first, voice_room);
- * (0.9.14) past GOV_HOT (75 %, ahead of the guard's 80 %) a voice less every half, and at 4 still past it 8 halves, LOAD
- * LITE of its own; a shed (the guard at 80 %) two less; under the budget 172 halves (0.5 s), one back; two sheds in 344
- * halves (1 s), LOAD LITE of its own (CLOUD / SHIMMER as ROOM, RESO as SPRING, the GRAIN delay plain, FM6 two voices)
- * until 5 s under the budget */
-#define GOV_HOT ((HALF_FRAMES * 1000000u / FS) * 75u / 100u * FM1_TICKS_PER_US)
-#define GOV_HOT_ECO ((HALF_FRAMES * 1000000u / FS) * 62u / 100u * FM1_TICKS_PER_US)
-#define GOV_HOT_1C ((HALF_FRAMES * 1000000u / FS) * 70u / 100u * FM1_TICKS_PER_US)
+/* (0.9.13) the load governor (voice.c gov_cap, gov_lite, gov_tick: what it does), a half at a time, on the render's
+ * time against its lines: GOV_OVER (0.9.19: 70 %, was the load budget's 65 %), GOV_HOT (75 %, ahead of the guard's
+ * 80 %), under the load budget's TIGHT_OFF (60 %) to give voices back; the guard's sheds */
+#define GOV_TICKS(pct) ((HALF_FRAMES * 1000000u / FS) * (pct) / 100u * FM1_TICKS_PER_US)
+#define GOV_HOT GOV_TICKS(GOV_HOT_PCT)
+#define GOV_HOT_ECO GOV_TICKS(GOV_HOT_PCT_ECO)
+#define GOV_HOT_1C GOV_TICKS(GOV_HOT_PCT_1C)
+#define GOV_OVER GOV_TICKS(GOV_OVER_PCT)                /* (0.9.19) the governor's own line, over the load budget's */
+#define GOV_OVER_ECO GOV_TICKS(GOV_OVER_PCT_ECO)
+#define GOV_OVER_1C GOV_TICKS(GOV_OVER_PCT_1C)
 static __attribute__((noinline)) uint32_t shed_check(uint32_t all)
 {
     uint32_t r = all - t5_nested_ticks;                /* (0.6.19) the budget on the render alone: a key scan or
@@ -147,7 +148,7 @@ static __attribute__((noinline)) uint32_t shed_check(uint32_t all)
     if ((shed_over & 3u) == 3u)                        /* (0.6.19: two in a row again, as before 0.6.17: one
                                                          * spike shed a voice every 2.9 ms, tails cut, clicks) */
         shed_req = 1;
-    gov_tick(r > (eco ? TIGHT_ON_ECO : one ? TIGHT_ON_1C : TIGHT_ON), r > (eco ? GOV_HOT_ECO : one ? GOV_HOT_1C : GOV_HOT),
+    gov_tick(r > (eco ? GOV_OVER_ECO : one ? GOV_OVER_1C : GOV_OVER), r > (eco ? GOV_HOT_ECO : one ? GOV_HOT_1C : GOV_HOT),
              r < (eco ? TIGHT_OFF_ECO : one ? TIGHT_OFF_1C : TIGHT_OFF), shed_req);
     return (all - t5_nested_ticks) / FM1_TICKS_PER_US;
 }

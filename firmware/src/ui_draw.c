@@ -67,15 +67,28 @@ static uint32_t head_load(void)
     uint32_t l = (song.cpu_q8 * 5u + 128u) >> 8;
     return song.cpu_q8 && !l ? 1u : l > 5u ? 5u : l;
 }
+/* (0.9.19) the voices short: a note cut for want of room (voice.c voice_taken) in the last 0.6 s lights the bars ACCENT
+ * instead of THEME (the song asks for more voices than the budget or the load gives: MENU > ABOUT > PROFILE's VOICES) */
+static uint32_t hv_seen, hv_ms;
+static int head_short(void)
+{
+    uint32_t n = voice_taken;
+    if (n != hv_seen) {
+        hv_seen = n;
+        hv_ms = fm1_ms | 1u;
+    }
+    return hv_ms && fm1_ms - hv_ms < 600u;
+}
 #define HEAD_LOAD_X 200                                /* the load's bars: 200 .. 218 */
 static void draw_load(int32_t x)
 {
     uint32_t k, n = head_load();
+    uint16_t lit = head_short() ? T_ACCENT : T_THEME;
     for (k = 0; k < 5u; k++)
         if (k >= n && cv_halo)                          /* (0.9.0) HUD's HOME: an unlit bar outlined, the beings through it */
             cv_frame(x + (int32_t)k * 4, HEAD_MID - 3, 3, 7, T_DIM);
         else
-            cv_rect(x + (int32_t)k * 4, HEAD_MID - 3, 3, 7, k < n ? T_THEME : T_RAISE);
+            cv_rect(x + (int32_t)k * 4, HEAD_MID - 3, 3, 7, k < n ? lit : T_RAISE);
 }
 static void draw_battery(int32_t bx)
 {
@@ -328,7 +341,7 @@ static void draw_head(void)
                    (ui.msg_t ? str_hash(7u, ui.msg) : ui.layer * 7919u) + (uint32_t)song.g[G_BPM] * 101u + (ui.bpm_t != 0) * 31u +
                    (uint32_t)seq_counting() * 7u + (ui_prefs & PREF_BPM_LOCK) * 4099u +
                    (uint32_t)batt_shown() * 7777u + (chain.running ? (chain.row + 1u) * 104729u : 0u) +
-                   head_load() * 0x9E3779B1u + str_hash(tc, ttl) * 3u;
+                   head_load() * 0x9E3779B1u + (uint32_t)head_short() * 977u + str_hash(tc, ttl) * 3u;
     int msg = ui.msg_t || ui.layer;
     int centre = !msg || ui.bpm_t || ui.layer == LAYER_GLO;   /* the BPM being changed: it stays, the message right */
     int32_t lx, r = HEAD_LOAD_X - 6;

@@ -341,9 +341,13 @@ static struct { volatile uint32_t peak, late, shed; } load_diag;
  * render in its time either way; a core 1 given up mid-session: NVOICE again from the next note */
 #define VOICES_2CORE 12u
 static int mc_two(void);                                /* (fx.c) */
+static uint32_t voice_cap_base(void)                    /* the budget the cores give, before the governor's */
+{
+    return sys_load == LOAD_ECO ? ECO_VOICES : mc_two() ? VOICES_2CORE : NVOICE;
+}
 static uint32_t voice_cap(void)
 {
-    uint32_t c = sys_load == LOAD_ECO ? ECO_VOICES : mc_two() ? VOICES_2CORE : NVOICE;
+    uint32_t c = voice_cap_base();
     return c < gov_cap ? c : gov_cap;
 }
 static uint32_t voices_busy(void)                       /* sounding voices of all parts (not the fading ones) */
@@ -353,6 +357,30 @@ static uint32_t voices_busy(void)                       /* sounding voices of al
         for (i = 0; i < NVOICE; i++)
             n += trk[p].v[i].active && trk[p].v[i].stage != 4u;
     return n;
+}
+/* (0.9.19) the budget counts what the voices cost, not how many they are: each voice its engine's weight, in eighths of
+ * the heaviest engine's voice (VOICE singing words: 8), from the host's instructions a sample of one more voice of the
+ * engine's heaviest preset (callgrind, as tests/cpu_vg.c: VOICE 240, FM6 219, ANALOG 179, WHEEL ANIMAL 162, PHASE 150,
+ * a DRUM-X hit 130, NOISE 126, LOFI 122), rounded up: the budget of voice_cap() voices never holds more CPU than that
+ * many of the heaviest (as before), and more of the lighter ones: VOICE FM6 8 (12 of them), ANALOG WHEEL ANIMAL 6 (16),
+ * PHASE LOFI NOISE and a drum hit 5 (19). Until 0.9.18 every voice was one, a drum hit as a VOICE note: a kit ringing
+ * on four lanes took a third of a six-track song's twelve */
+#define VW_ONE 8u
+static const uint8_t VOICE_W[NENGINES] = {6, 8, 5, 5, 8, 8, 8, 6, 8, 8, 5, 5, 8, 8, 6};   /* (by engine number) */
+static uint32_t voice_w(const track_t *t) { return VOICE_W[t->engine % NENGINES]; }
+static uint32_t voice_units(void)                       /* the budget in use: voices_busy, each by its weight */
+{
+    uint32_t p, i, n, u = 0;
+    for (p = 0; p < NPART; p++) {
+        for (i = n = 0; i < NVOICE; i++)
+            n += trk[p].v[i].active && trk[p].v[i].stage != 4u;
+        u += n * voice_w(&trk[p]);
+    }
+    return u;
+}
+static int budget_full(const track_t *t)                /* no room for one more voice of part t */
+{
+    return voice_units() + voice_w(t) > voice_cap() * VW_ONE;
 }
 
 /* (0.9.19) how loud a voice is now, Q15 (its amplitude with the velocity): the envelope's (env_out), but a DRUM hit's
@@ -397,32 +425,46 @@ static uint32_t lowest_held(const track_t *t)           /* index of the lowest h
 
 /* the voice to give up for a new one (see the top); soft: only released voices and
  * extra voices of other non-POLY parts (also ones left after a mode change).
- * Returns its index, *pp its part; NVOICE = none */
+ * Returns its index, *pp its part; NVOICE = none.
+ * (0.9.19) First what is not heard: a released voice under -60 dB, a note held at a silent sustain (SUS 0 decayed, no
+ * LOOP); then of the released ones the quietest (was the oldest: a pad's long tail, loud, went before a pluck's
+ * nearly gone), a DRUM hit and an FM6 note by their own level (voice_level: their ADSR is held at full); of the held
+ * ones the asker's own before another part's (a chord replacing its last one, not a busy part cutting a held pad) */
+#define VL_SILENT 33                                    /* -60 dB of full scale, Q15 */
 static uint32_t voice_victim(const track_t *self, int soft, track_t **pp)
 {
-    uint32_t p, i, best = NVOICE, cat = 4;
+    uint32_t p, i, best = NVOICE, cat = 6;
+    int32_t blv = 0;
     for (p = 0; p < NPART; p++) {
         track_t *t = &trk[p];
+        const engine_t *e = ENGINES[t->engine % NENGINES];
         uint32_t mode = trk_vmode(t);
         uint32_t low = mode == V_POLY ? lowest_held(t) : NVOICE;
+        int mute0 = !t->p[P_SUS] && t->p[P_ELOOP] <= 0 && !e->ownenv && !e->oneshot && !e->amp;
         if (soft && t == self)
             continue;
         for (i = 0; i < NVOICE; i++) {
             const voice_t *v = &t->v[i];
             uint32_t c;
+            int32_t lv = 0;
             if (!v->active || v->stage == 4u)
                 continue;
-            if (!v->gate)
-                c = 1;                                  /* released */
+            if (!v->gate) {
+                lv = voice_level(t, v);
+                c = lv < VL_SILENT ? 0u : 1u;           /* released: not heard any more, or the quietest */
+            } else if (mute0 && v->stage == 2u && !v->env_out && v->env < (1 << 12))
+                c = 0;                                  /* held at a silent sustain */
             else if (mode != V_POLY && i > 0)
                 c = 2;                                  /* extra UNISON, or a voice left by a mode / cap change */
             else if (!soft && mode == V_POLY && i != low)
-                c = 3;                                  /* held, not the bass */
+                c = t == self ? 3u : 4u;                /* held, not the bass: the asker's own first */
             else
                 continue;
-            if (c < cat || (c == cat && v->age < (*pp)->v[best].age)) {
+            if (c < cat || (c == cat && (c == 1u ? lv < blv || (lv == blv && v->age < (*pp)->v[best].age)
+                                                 : v->age < (*pp)->v[best].age))) {
                 cat = c;
                 best = i;
+                blv = lv;
                 *pp = t;
             }
         }
@@ -435,6 +477,9 @@ static uint32_t voice_victim(const track_t *self, int soft, track_t **pp)
  * under -50 dB (inaudible, one per note while LOAD is tight); the overload guard's are audio.c shed_count; the rest
  * were taken for a new note with the budget of voices full (voices_stolen) */
 static uint32_t voice_kills, voice_trims;               /* voices given up (budget, overload): console, hostsim */
+static volatile uint32_t voice_taken;                   /* (0.9.19) notes cut for want of room (the budget full, the
+                                                         * guard; not the inaudible trims): the header's load bars turn
+                                                         * ACCENT a while after one (ui_draw.c head_short) */
 static void voice_kill(voice_t *v)                      /* fade out over ~6 ms (env_tick stage 4; 0.6.74, was a block) */
 {
     v->gate = 0;
@@ -454,8 +499,8 @@ static uint32_t quiet_tail(track_t **pp)
     for (p = 0; p < NPART; p++)
         for (i = 0; i < NVOICE; i++) {
             const voice_t *v = &trk[p].v[i];
-            if (!v->active || v->gate || v->stage == 4u || v->env_out >= 104)
-                continue;
+            if (!v->active || v->gate || v->stage == 4u || voice_level(&trk[p], v) >= 104)
+                continue;                               /* (0.9.19: a hit's, an FM6 note's own level) */
             if (best == NVOICE || v->age < (*pp)->v[best].age) {
                 best = i;
                 *pp = &trk[p];
@@ -464,12 +509,13 @@ static uint32_t quiet_tail(track_t **pp)
     return best;
 }
 
-/* the budget is full: free a voice for part t. 0 = nothing to take (soft) */
+/* the budget is full: free a voice for part t. 0 = nothing to take (soft). (0.9.19) By weight: as many voices as the
+ * new one needs (a FM6 note may take two hits' room); soft (an extra UNISON voice) one at most, only if that is enough */
 static int voice_room(track_t *t, int soft)
 {
     track_t *vp = 0;
-    uint32_t k;
-    if (voices_busy() < voice_cap()) {
+    uint32_t k, n;
+    if (!budget_full(t)) {
         if (load_tight && (k = quiet_tail(&vp)) < NVOICE) {
             VSTAT(VS_TRIM, vp, &vp->v[k]);
             voice_kill(&vp->v[k]);                      /* (the load budget: a dying tail makes the room) */
@@ -477,18 +523,39 @@ static int voice_room(track_t *t, int soft)
         }
         return 1;
     }
-    k = voice_victim(t, soft, &vp);
-    if (k == NVOICE)
-        return !soft;                                   /* hard: over the budget (cannot happen: each of the
+    for (n = 0; n < NVOICE && budget_full(t); n++) {
+        k = voice_victim(t, soft, &vp);
+        if (k == NVOICE)
+            return !soft;                               /* hard: over the budget (cannot happen: each of the
                                                          * NPART < NVOICE parts protects one voice at most) */
-    VSTAT(VS_STEAL, vp, &vp->v[k]);
-    voice_kill(&vp->v[k]);
+        if (soft && voice_units() - voice_w(vp) + voice_w(t) > voice_cap() * VW_ONE)
+            return 0;                                   /* (one would not do: none taken) */
+        VSTAT(VS_STEAL, vp, &vp->v[k]);
+        voice_taken++;
+        voice_kill(&vp->v[k]);
+    }
     return 1;
 }
 
-/* (0.9.13, in audio.c until 0.9.19) the load governor, a half at a time (audio.c shed_check: see there) */
+/* (0.9.13, in audio.c until 0.9.19) the load governor, a half at a time (audio.c shed_check): over GOV_OVER 3 halves in a
+ * row (0.9.14: was 6), a voice less for all parts (the song thins out: the quietest released voices first, voice_room);
+ * past GOV_HOT two halves in a row (0.9.19: was every half), a voice less, and at 4 still past it 8 times, LOAD LITE of
+ * its own; a shed (the guard at 80 %) two less; two sheds in 344 halves (1 s), LOAD LITE of its own (CLOUD / SHIMMER as
+ * ROOM, RESO as SPRING, the GRAIN delay plain, FM6 two voices) until 5 s under the budget. Back: a voice after 344
+ * points of calm, a half under TIGHT_OFF 2, one between it and GOV_OVER 1, over GOV_OVER none, a hot one back to 0
+ * (0.5 s and more; until 0.9.18 172 halves under TIGHT_OFF in a row: a song a little over 60 % never got them back).
+ * (0.9.19) Over GOV_OVER alone it stops at 2/3 of the cores' budget (8 of 12): the load past 70 % is mostly the parts'
+ * own and the effects' (the sequencer, the buses: tests/voice_load_test.c, ~60 % of a six-track song before its first
+ * voice), so 0.9.18 took the voices down to 4 for a few % of the load (each voice ~2 %), every note after cutting
+ * another; only GOV_HOT and the guard go further */
+#define GOV_OVER_PCT 70u
+#define GOV_OVER_PCT_ECO 55u
+#define GOV_OVER_PCT_1C 60u
+#define GOV_HOT_PCT 75u
+#define GOV_HOT_PCT_ECO 62u
+#define GOV_HOT_PCT_1C 70u
 static uint16_t gov_hot, gov_calm, gov_win, gov_lcalm;
-static uint8_t gov_sheds, gov_floor;
+static uint8_t gov_sheds, gov_floor, gov_hot2;
 static void gov_tick(int over, int hot, int under, int shed)
 {
     uint32_t c = gov_cap > NVOICE + 4u ? NVOICE + 4u : gov_cap;
@@ -500,16 +567,19 @@ static void gov_tick(int over, int hot, int under, int shed)
     }
     if (gov_win) gov_win--;
     gov_floor = hot ? gov_floor : 0;
+    gov_hot2 = (uint8_t)(hot ? gov_hot2 + 1u : 0u);
     if (over || hot) {
-        gov_calm = 0;
-        if (hot || ++gov_hot >= 3u) {
-            gov_hot = 0;
-            if (c > 4u) c--;
+        if (hot)
+            gov_calm = 0;                               /* (0.9.19: over alone holds the calm, does not undo it) */
+        if ((hot && gov_hot2 >= 2u) || (!hot && ++gov_hot >= 3u)) {
+            gov_hot = gov_hot2 = 0;
+            if (c > 4u && (hot || c > voice_cap_base() * 2u / 3u)) c--;
             else if (hot && ++gov_floor >= 8u) { gov_lite = LOAD_LITE; gov_lcalm = 0; }
         }
     } else {
         gov_hot = 0;
-        if (under && ++gov_calm >= 172u) { gov_calm = 0; if (c < NVOICE + 4u) c++; }
+        gov_calm = (uint16_t)(gov_calm + (under ? 2u : 1u));
+        if (gov_calm >= 344u) { gov_calm = 0; if (c < NVOICE + 4u) c++; }
     }
     if (gov_lite && (under ? ++gov_lcalm >= 1720u : (gov_lcalm = 0, 0))) gov_lite = 0;
     gov_cap = (uint8_t)c;
@@ -517,18 +587,25 @@ static void gov_tick(int over, int hot, int under, int shed)
 /* (in audio.c until 0.9.19) the overload guard's voice: the quietest released one, else the oldest held one that is not a
  * part's lead or bass */
 static uint32_t shed_count;
-static void shed_voice(void)
+static __attribute__((noinline)) void shed_voice(void)   /* (out of the audio ISR's loops, as in audio.c) */
 {
     uint32_t p, i;
+    int32_t blv = 0;
     voice_t *best = 0;
     for (p = 0; p < NPART; p++)
         for (i = 0; i < NVOICE; i++) {
             voice_t *v = &trk[p].v[i];
-            if (v->active && !v->gate && v->stage != 4u && (!best || v->env < best->env))
-                best = v;
+            if (v->active && !v->gate && v->stage != 4u) {
+                int32_t lv = voice_level(&trk[p], v);   /* (0.9.19: a hit's, an FM6 note's own level, not env) */
+                if (!best || lv < blv) {
+                    best = v;
+                    blv = lv;
+                }
+            }
         }
     if (best) {
         VSTAT(VS_SHED, 0, best);
+        voice_taken++;
         voice_kill(best);
         shed_count++;
         return;
@@ -547,6 +624,7 @@ static void shed_voice(void)
     }
     if (best) {
         VSTAT(VS_SHED, 0, best);
+        voice_taken++;
         voice_kill(best);
         shed_count++;
     }
@@ -581,17 +659,21 @@ static voice_t *voice_alloc(track_t *t, uint32_t note)
             return voice_reuse(t, &t->v[i]);
         nfree += !t->v[i].active;
     }
-    if (nfree && (voices_busy() >= voice_cap() || load_tight)) {   /* (0.6.16: the load budget too; 0.6.18: a dying tail) */
+    if (nfree && (budget_full(t) || load_tight)) {     /* (0.6.16: the load budget too; 0.6.18: a dying tail) */
         track_t *vp = 0;
-        uint32_t full = voices_busy() >= voice_cap(), k = full ? voice_victim(t, 0, &vp) : quiet_tail(&vp);
+        uint32_t full = (uint32_t)budget_full(t), k = full ? voice_victim(t, 0, &vp) : quiet_tail(&vp);
         if (k < np && vp == t) {
             VSTAT(VS_OWN, t, &t->v[k]);
+            voice_taken++;
             return &t->v[k];                            /* our own: restart it in place (no click) */
         }
         if (k < NVOICE) {
             VSTAT(full ? VS_STEAL : VS_TRIM, vp, &vp->v[k]);
+            voice_taken += full;
             voice_kill(&vp->v[k]);
             voice_trims += !full;                       /* (the load budget's quiet tail, not a steal) */
+            if (full)
+                voice_room(t, 0);                       /* (0.9.19: a lighter voice taken: more, by weight) */
         }
     }
     if (t->p[P_ALLOC] || t->p[P_GLIDE]) {
@@ -617,12 +699,19 @@ static voice_t *voice_alloc(track_t *t, uint32_t note)
     }
     if (best < np)
         return &t->v[best];
+    bd = 0;
     for (i = 0; i < np; i++)                             /* the lowest held note is protected */
         if (t->v[i].gate && (low == np || t->v[i].note < t->v[low].note))
             low = i;
-    for (i = 0; i < np; i++)                             /* oldest released (not one fading out for another part) */
-        if (!t->v[i].gate && t->v[i].stage != 4u && (best == np || t->v[i].age < t->v[best].age))
-            best = i;
+    for (i = 0; i < np; i++)                             /* (0.9.19) the quietest released (was the oldest; not one
+                                                         * fading out for another part) */
+        if (!t->v[i].gate && t->v[i].stage != 4u) {
+            int32_t lv = voice_level(t, &t->v[i]);
+            if (best == np || lv < bd || (lv == bd && t->v[i].age < t->v[best].age)) {
+                best = i;
+                bd = lv;
+            }
+        }
     if (best == np)
         for (i = 0; i < np; i++)                         /* oldest held, not the bass */
             if (i != low && (best == np || t->v[i].age < t->v[best].age))
@@ -1072,6 +1161,18 @@ static int32_t env_tick(track_t *t, voice_t *v)
     return v->env >> 9;
 }
 
+/* (0.9.19) while the load budget is tight, a released tail under -50 dB ends (faded over env_tick's stage 4) as soon as
+ * it gets there, not only when a new note needs its room (quiet_tail): the CPU it took (as much as a loud note's) goes
+ * to the notes heard; under -50 dB in a mix loud enough to be that heavy, nobody hears it go. Out of line */
+static __attribute__((noinline)) void tail_trim(track_t *t, voice_t *v)
+{
+    if (voice_level(t, v) < 104) {
+        VSTAT(VS_TRIM, t, v);
+        voice_kill(v);
+        voice_trims++;
+    }
+}
+
 /* (JIANT 0.7.8) DRIFT: each voice its own slow value noise (mod.c drift_noise), on the track's blocks */
 static uint32_t drift_clk[NTRK];
 
@@ -1146,6 +1247,8 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
                     env = 32767;
                 }
             }
+            if (load_tight && v->stage == 3u && !v->gate)
+                tail_trim(t, v);                        /* (0.9.19: from the next block) */
             if (e->amp)                                 /* the engine's own amplitude curve */
                 env = e->amp(t, v, env);
             m.envq15 = e->ownenv ? 0 : env;

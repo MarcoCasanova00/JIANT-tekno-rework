@@ -87,8 +87,9 @@ static void gx_listen(uint32_t blocks, double *rms, int32_t *peak, uint32_t *cli
             cl += v >= 32767;
             acc += (double)o[i] * (double)o[i];
         }
-        for (p = 0; p < NPART; p++)                     /* (as voice.c voices_busy counts them: not the fading) */
-            for (i = 0; i < NVOICE; i++) nv += trk[p].v[i].active && trk[p].v[i].stage != 4u;
+        nv = voice_units();                             /* (0.9.19: the budget in use by weight, voice.c VOICE_W: as
+                                                         * voices_busy counts them, not the fading) */
+        (void)p;
         if (nv > vm) vm = nv;
     }
     transport_req = 2;
@@ -642,13 +643,14 @@ int main(void)
         }
         printf("gen: EXPLORE x %u: %u tempos (%u..%u BPM), %u keys, %u loop lengths (%u odd), %u drum maps, %u engines, polyrhythm in %u,\n"
                "gen:   %u DIVs off 1/16, %u components, %u DRUM-X octave steps, %u playheads, %u singing VOICEs; %u notes: %u coloured, %u approaches;\n"
-               "gen:   RMS %.0f at least, peak %d, %u voices at most (the genres: %u)\n",
+               "gen:   RMS %.0f at least, peak %d, %u of the voice budget at most by weight (the genres: %u)\n",
                SEEDS, nbpm, bpm_lo, bpm_hi, nsc, nlen, odd, ndm, neng, poly, divs, comps, lms, heads, words, nn, key_col, key_appr, rms_min,
                peak_max, vmax_all, vref);
         bad += gcheck("  60 seeds: each named EXPLORE nnnn, each another piece (no two the same)", !name_bad && !same);
         bad += gcheck("  each plays: two melodic parts at least, sound (RMS), never stuck at full scale", !nmel_bad && !quiet && !loud);
         bad += gcheck("  the budgets: FM6 / ANIMAL / VOICE on two tracks at most, one DRUM track, no more voices than a genre's",
-                      !budget_bad && vmax_all <= vref);
+                      !budget_bad && (vmax_all <= vref || vmax_all <= VOICES_2CORE * VW_ONE));   /* (0.9.19: by weight;
+                                                         * both fill the budget, its own room the limit) */
         bad += gcheck("  the SCALE page its key on every track (a mode of seven, QUANT on); the CHORD page in-scale, its chords in the key",
                       !page_bad && !chord_bad);
         bad += gcheck("  every note in the key but the coloured chords' tones and the approaches (< 12 %), in range",

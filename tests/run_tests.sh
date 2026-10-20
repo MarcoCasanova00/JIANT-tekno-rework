@@ -14,6 +14,10 @@
 #                   (tests/target_budget.txt, +10 %; exact, static).
 #   voices          the budget of 8, steal fades, MONO / LEGATO / UNISON keep their note, the VOICE cap,
 #                   no hanging notes on any MIDI / key routing.
+# VOICES (tests/voice_load_test.c, 0.9.19): the shared budget under 16 songs played 24 s on two cores (the load modelled
+#                   from gen.c's costs, the governor and guard driven by it): notes cut while held and tails cut while heard
+#                   per song within limits (0.9.18's in the file), no modelled late half; a held pad under a busy kit kept,
+#                   the budget by weight (16 ANALOG voices in 12), the quietest released voice first, the asker's own.
 # UI renders (tests/ui_render.c): every screen in every palette from the real drawing code: the layout lint (no text
 #                   off the screen, cut, hidden, overlapping or spilling out of its cell / card; only free text
 #                   ellipsised), GREY gray, MONO neutral, the draw cost, the text audit (build/ui_new/text_audit.tsv);
@@ -316,6 +320,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "DELAY: no leak at the far end, the long times at half / quarter rate (timing, response, aliases, noise), no click on a rate change, MOD / GRAIN / FEEDBK there, demos" "$OUT/delay_test" build/fx_demo
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/regress" tests/regress.c -lm
     run "regression: golden renders, health, voices, CPU budget" "$OUT/regress" tests/golden.txt tests/cpu_baseline.txt
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -Itests -o "$OUT/voice_load_test" tests/voice_load_test.c -lm
+    run "VOICES (0.9.19): the budget by weight under 16 songs (power-on, pad, arps, ratchets, PLAYHEADS, UNISON, GEN, EXPLORE): notes cut within limits, no late half, a held pad kept, the quietest first" "$OUT/voice_load_test"
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/descdump" tests/descdump.c -lm
     echo "== parameter and engine tables as JSON (for the editor mock test)"
     "$OUT/descdump" > "$OUT/desc.json" || fail=1

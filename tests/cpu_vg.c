@@ -12,7 +12,8 @@
  *   rev/<TYPE>     a pad soaked in the reverb, each REVERB TYPE (ROOM SPRING SHIMR RESO CLOUD)
  *   dly/<RATE>     (0.8.4) a pad into the delay, its line at the full rate, half, a quarter (fx.c dly_lo)
  *   mix/full       six parts: four ANALOG / FM6 chords, drums, every FX on
- *   mix/v12        (0.9.12) the second core's 12 voices: six ANALOG / FM6 chords (24 notes held), every FX on, 12 sounding,
+ *   mix/v12        (0.9.12) the second core's 12 voices: six ANALOG / FM6 chords (24 notes held), every FX on, 12 sounding
+ *                  (0.9.19: the budget by weight, 13 of them; .one 9),
  *                  CORES 2 (mc_host): both cores' instructions; mix/v12.c0 core 0's alone (core 1's jobs not counted:
  *                  what the audio ISR waits on); mix/v12.one the same scene on one core (8 sounding)
  *   seq/plain      the sequencer: six tracks of chords / hits on every step at 200 BPM
@@ -188,7 +189,7 @@ int main(void)
     vg_section("mix/full");
     for (e = 0; e < 3u; e++) {                          /* (0.9.12) twelve voices on two cores; the scene on one */
         static const char *const VN[3] = {"mix/v12.one", "mix/v12", "mix/v12.c0"};
-        uint32_t k, nv = 0, live = trk_live;
+        uint32_t k, nv = 0, live = trk_live, nu;
         vg_quiet();
         trk_live = NTRK;
         mc_host = e != 0u;
@@ -203,9 +204,14 @@ int main(void)
         for (i = 0; i < NPART; i++)
             for (k = 0; k < NVOICE; k++)
                 nv += trk[i].v[k].active && trk[i].v[k].stage != 4u;
+        nu = voice_units();                         /* (0.9.19: the budget full by weight, voice.c VOICE_W: 13 voices
+                                                     * of ANALOG and FM6 in the 12's room, 9 in the 8's) */
         mc_host = 0;
         trk_live = live;
-        if (nv != (e ? 12u : 8u)) { printf("cpu_vg: %s: %u voices sounding\n", VN[e], nv); return 1; }
+        if (nu > (e ? 12u : 8u) * VW_ONE || nu + VW_ONE <= (e ? 12u : 8u) * VW_ONE) {
+            printf("cpu_vg: %s: %u voices sounding, %u of the budget\n", VN[e], nv, nu);
+            return 1;
+        }
     }
     vg_seq(0);
     vg_section("seq/plain");
