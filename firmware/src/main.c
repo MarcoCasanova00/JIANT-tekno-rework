@@ -361,6 +361,7 @@ static void fm1_main(void)
         }
 #if FELUCCA_OTA
         ed_service();                                   /* web editor SysEx */
+        vf_service();                                   /* (0.9.19) VIS FEED: the Stems app's visuals, if it asks */
         ota_service();                                  /* M-UPGRADE handshake */
         if (usb.ota_req) {                              /* M-UPGRADE upgrade command */
             usb.ota_req = 0;
@@ -404,6 +405,7 @@ static void fm1_main(void)
             ui_input();
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
+            vf_service();                       /* (0.9.19: its events too; at most a pass in VF_GAP_MS) */
 #endif
         }
     }

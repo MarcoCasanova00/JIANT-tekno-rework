@@ -2532,6 +2532,7 @@ static void gen_go(void)
     char b[8];
     undo_mark();
     gen_make();
+    vf_mark(4, 7, gp.seed >> 7, gp.seed);              /* (0.9.19 VIS FEED: GEN, a piece thrown) */
     str_cpy(gp.last, gs.g->name, sizeof gp.last);
     k = str_len(gp.last);
     b[0] = ' '; b[1] = (char)('0' + gp.seed / 1000u % 10u); b[2] = (char)('0' + gp.seed / 100u % 10u);

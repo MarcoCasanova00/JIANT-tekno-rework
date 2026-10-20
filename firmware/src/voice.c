@@ -688,6 +688,12 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         return;
     if (pfx_note(t, note, vel))                         /* the punch-in effects (pfx.c): a repeat holds the track */
         return;
+    {   /* (0.9.19) VIS FEED: the note started, for the app's visuals (visfeed.c reads the ring) */
+        uint32_t ti = (uint32_t)(t - trk) % NTRK;
+        vf_nr[ti][vf_nw[ti] & 7u] = (uint16_t)(note | vel << 8);
+        RING_PUBLISH();
+        vf_nw[ti]++;
+    }
     if (t->xf_on || t->eng_req != t->engine) {          /* engine switch under way: after the fade */
         for (i = 0; i < t->xp_n && t->xp_note[i] != note; i++)
             ;

@@ -2119,8 +2119,10 @@ static __attribute__((noinline)) void perf_mut_poll(void)
     pm_amt = (uint8_t)a;
     if (!mut_anchor_get())
         return;
-    for (k = 0; k < trk_live; k++)
+    for (k = 0; k < trk_live; k++) {
         mut_pattern(&trk[k], proj_scratch.t[k].engine == trk_eng(&trk[k]) ? &proj_scratch.t[k] : 0, a * 127u / 100u);
+        vf_mark(3, k, 4, a * 127u / 100u);              /* (0.9.19 VIS FEED: MUTATE, the macro's) */
+    }
     for (k = 0; k < NTRK; k++)
         mut.sig[k] = steps_sig(&trk[k]);
 }
@@ -2175,8 +2177,12 @@ static void mutate_poll(void)
         if (!((en >> k) & 1u))
             continue;
         if (s && nx % s == 0u) { mut_sound(t, a); hit = 1; }
-        if (q && nx % q == 0u) { mut_pattern(t, a, (uint32_t)clamp(t->p[P_MAMT], 0, 127)); hit = 1; }
-        if (hit) { mut_flash[k] = 12; mut.moved |= (uint8_t)(1u << k); }
+        if (q && nx % q == 0u) { mut_pattern(t, a, (uint32_t)clamp(t->p[P_MAMT], 0, 127)); hit |= 2u; }
+        if (hit) {
+            mut_flash[k] = 12;
+            mut.moved |= (uint8_t)(1u << k);
+            vf_mark(3, k, hit, (uint32_t)clamp(t->p[P_MAMT], 0, 127));   /* (0.9.19 VIS FEED: MUTATE) */
+        }
     }
     for (k = 0; k < NTRK; k++)
         mut.sig[k] = steps_sig(&trk[k]);

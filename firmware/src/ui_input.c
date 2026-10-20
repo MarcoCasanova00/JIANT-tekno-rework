@@ -1867,6 +1867,7 @@ static void part_dice(uint32_t kind)
     if (kind == CF_DICE_SOUND) sound_dice_of(TSEL, 1);
     else if (kind == CF_DICE_LFO) lfo_dice(TSEL);
     else if (kind == CF_DICE_FX) fx_dice(TSEL);
+    vf_mark(4, song.sel, kind - CF_DICE_SOUND, 0);      /* (0.9.19 VIS FEED: DICE) */
 }
 static int dice_kind(uint32_t c) { return c == CF_DICE_SOUND || c == CF_DICE_SEQ || c == CF_DICE_LFO || c == CF_DICE_FX; }
 /* (0.6.21) HOME + SELECT (after the dialog): everything diced into a new piece. One scale for the song (ROOT, a

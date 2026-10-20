@@ -129,6 +129,8 @@ static void prefs_update(void)
 #define PREF_SCALE_LEDS (0x40u << 8)
 #define ui_load (favorites.factory[15][26])    /* (JIANT 0.6.30) LOAD (voice.c sys_load): 0 FULL, 1 LITE, 2 ECO; a byte no
                                                 * engine uses, 0 in older settings (0.6.29's 6 LITE: 1, LITE) */
+#define vis_feed_off (favorites.factory[15][16])   /* (0.9.19) MENU > MIDI > VIS FEED (visfeed.c): 0 ON (older settings
+                                                * too), 1 OFF; a byte no engine uses (the hints have 0..3) */
 #define midi_out_mode (favorites.factory[15][24])   /* (JIANT 0.6.72) MENU > MIDI OUT (seq.c MO_*): 0 KEYS (older settings,
                                                 * as ever), 1 CLOCK, 2 ALL, 3 OFF; a byte no engine uses */
 #define PREF_SIX (0x80u << 8)                  /* (JIANT 0.6.18) MENU > TRACKS 6: all six tracks play; clear (the

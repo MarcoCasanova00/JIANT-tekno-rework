@@ -30,6 +30,7 @@ SIZE_FILES = ["ui.c", "favorites.c", "menu_items.c", "cpu_safe.c", "icons.c", "u
               "gen.c", "gen_tables.c", "song_dice.c", "ui_lens.c", "ui_organic.c", "ui_fm6op.c", "ui_being.c",
               "ui_engvis.c", "ui_tech.c", "ui_lzsave.c", "ui_lzfx.c", "ui_lzhome.c", "ui_lzedit.c", "ui_lzpage.c", "ui_dx.c",
               "ui_tools.c", "fm6_vbank.c", "sing.c", "seq_live.c", "ui_live.c",
+              "visfeed.c",                                       # (0.9.19) VIS FEED: the main loop's
               # (0.9.7) the main-loop functions of the sound files (what the interrupts reach stays -Os, as above): the
               # MASTER pot's boot and poll, FM6's patch store, the kit's names and grids, MOD's names, the PUNCH lane
               "pfx.c", "master.c", "audio.c", "mod.c", "fx.c", "drumx_voice.c", "eng_drum.c", "eng_fm6.c",

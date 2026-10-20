@@ -715,6 +715,23 @@ static track_t trk[NTRK];        /* the instrument: four parts */
 static song_t song;
 #define TSEL (&trk[song.sel])    /* the selected track */
 
+/* (0.9.19) VIS FEED (visfeed.c): the main loop's own events (MUTATE, DICE, GEN) queued where they happen, sent with
+ * the rest on the next pass; nothing while no app has subscribed (vf_q.on). Main loop only (never the audio ISR) */
+#define VF_NQ 8u
+static struct { uint8_t on, n, ev[VF_NQ][3]; } vf_q;
+/* .. and the notes each track starts (voice.c trk_note_on, the audio ISR: a store and a count a note, never waits): a
+ * ring of 8 a track, read by the main loop */
+static volatile uint8_t vf_nw[NTRK];
+static uint16_t vf_nr[NTRK][8];
+static inline void vf_mark(uint32_t kind, uint32_t k, uint32_t a, uint32_t b)
+{
+    if (vf_q.on && vf_q.n < VF_NQ) {
+        vf_q.ev[vf_q.n][0] = (uint8_t)((kind & 15u) << 3 | (k & 7u));
+        vf_q.ev[vf_q.n][1] = (uint8_t)(a & 127u);
+        vf_q.ev[vf_q.n++][2] = (uint8_t)(b & 127u);
+    }
+}
+
 /* SWING of a track's step clock: the track's own plus the global one, at most 100 (#31). The sequencer
  * (seq.c step_samples) and the SLICER (slicer.c sl_enter) both time steps with it. At 100 the even
  * steps are 1.4 x the straight length and the odd ones 0.6 x. */

@@ -110,6 +110,7 @@
 #include "ota.c"
 #include "ota_hw.c"
 #include "editor.c"              /* web editor SysEx (needs the OTA SysEx plumbing) */
+#include "visfeed.c"             /* (0.9.19) VIS FEED: the synth's state for the Stems app's visuals (the same SysEx ring) */
 #endif
 #if FELUCCA_CDC
 #include "console.c"

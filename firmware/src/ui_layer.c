@@ -274,7 +274,7 @@ static void layer_tap(uint32_t l)
     else
         (void)page_tap(LAYERS[l].btn);
 }
-typedef char hk_room_t[HK_N <= 20 ? 1 : -1];   /* (bytes 20.. of engine 15's: other settings) */
+typedef char hk_room_t[HK_N <= 16 ? 1 : -1];   /* (bytes 16.. of engine 15's: other settings; 0.9.19: 16 VIS FEED) */
 /* (0.9.5) INIT SYSTEM: the teaching hints start over (none given) */
 static void hints_reset(void)
 {

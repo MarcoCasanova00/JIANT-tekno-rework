@@ -5,7 +5,7 @@
  * MENU_DESC / MENU_SET). One apply path for both: menu_put. A row is a setting (its MI_* is its place in the menu's
  * tables, not stored: the editor's ids are editor_menu.c ED_MENU's). (0.9.18) On nine pages of up to four knobs in five
  * tabs (MPAGE): SCREEN (COLOR SKIN STYLE LARGE; SCOPE ANIMATION SCREEN SLEEP; LEDS: LED GLOW SCALE LEDS), AUDIO
- * (SPEAKER EQ TRACKS LOAD BPM LOCK; CLICK CLICK LEVEL COUNT-IN), MIDI (MIDI OUT LEARN LEARN CLEAR), USB (USB AUDIO USB
+ * (SPEAKER EQ TRACKS LOAD BPM LOCK; CLICK CLICK LEVEL COUNT-IN), MIDI (MIDI OUT LEARN LEARN CLEAR VIS FEED), USB (USB AUDIO USB
  * LEVEL), SYSTEM (CONTROLS: HOLD TIME KNOB SPEEDUP FX LATCH CALIBRATION; SYSTEM: RESTORE LAST CPU CORES CPU CLOCK, what
  * a power-on does, and ABOUT). Until 0.9.17 one list in the
  * tabs DISPLAY CONTROL AUDIO MIDI SYSTEM, SELECT a row, any knob its value; the stored values and their meanings are
@@ -15,7 +15,7 @@
 #include "cpu_safe.c"        /* (0.9.12) MENU > SYSTEM > CPU CORES, CPU CLOCK; the last crash kept in the settings */
 enum { MI_COLOR, MI_SKIN, MI_SCOPE, MI_STYLE, MI_LARGE, MI_ANIM, MI_LEDS, MI_SCROFF, MI_HOLD, MI_ACCEL, MI_LATCH, MI_BPMLOCK, MI_SCLLED,
        MI_LOWCUT, MI_USB,
-       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TRACKS, MI_LOAD, MI_MIDIOUT, MI_LEARN, MI_LCLEAR, MI_SERIAL, MI_RESTORE, MI_CPU,
+       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_TRACKS, MI_LOAD, MI_MIDIOUT, MI_LEARN, MI_LCLEAR, MI_VISFEED, MI_SERIAL, MI_RESTORE, MI_CPU,
        MI_CLOCK, MI_PANEL, MI_ABOUT, MI_COUNT };   /* (1.1: the metronome's rows; 1.2: RESTORE LAST, SCALE LEDS; 0.9.12: MIDI
                       * OUT, LEARN, LEARN CLEAR; CPU, CPU CLOCK, cpu_safe.c; 0.9.18: INIT SYSTEM gone, SAVE > TOOLS > NEW
                       * PROJECT is the same) */
@@ -26,7 +26,7 @@ static int menu_valued(uint32_t row) { return row < MI_VALUES && row != MI_LCLEA
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "SKIN", "SCOPE", "STYLE", "LARGE", "ANIMATION", "LED GLOW", "SCREEN SLEEP",
                                               "HOLD TIME", "KNOB SPEEDUP", "FX LATCH", "BPM LOCK", "SCALE LEDS",
                                               "SPEAKER EQ", "USB LEVEL", "CLICK", "CLICK LEVEL", "COUNT-IN", "TRACKS", "LOAD",
-                                              "MIDI OUT", "LEARN", "LEARN CLEAR", "USB AUDIO",
+                                              "MIDI OUT", "LEARN", "LEARN CLEAR", "VIS FEED", "USB AUDIO",
                                               "RESTORE LAST", "CPU CORES", "CPU CLOCK", "CALIBRATION", "ABOUT"};
 /* (0.9.18) the MENU as the rest of the system (rule 1..6): pages of four knobs, KNOB n the page's setting n, SELECT walks
  * the pages, ALGORITHM jumps to the next / previous tab; the tabs the groups (a dot a page), the footer MENU . TAB . page
@@ -43,7 +43,7 @@ static const menu_page_t MPAGE[MP_COUNT] = {   /* (a page opens on its first set
     {"LEDS", MTAB_SCREEN, {MI_LEDS, MI_SCLLED, MI_NONE, MI_NONE}},
     {"AUDIO", MTAB_AUDIO, {MI_LOWCUT, MI_TRACKS, MI_LOAD, MI_BPMLOCK}},
     {"CLICK", MTAB_AUDIO, {MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_NONE}},
-    {"MIDI", MTAB_MIDI, {MI_MIDIOUT, MI_LEARN, MI_LCLEAR, MI_NONE}},
+    {"MIDI", MTAB_MIDI, {MI_MIDIOUT, MI_LEARN, MI_LCLEAR, MI_VISFEED}},   /* (0.9.19: VIS FEED) */
     {"USB", MTAB_USB, {MI_SERIAL, MI_USB, MI_NONE, MI_NONE}},
     {"CONTROLS", MTAB_SYSTEM, {MI_HOLD, MI_ACCEL, MI_LATCH, MI_PANEL}},
     {"SYSTEM", MTAB_SYSTEM, {MI_RESTORE, MI_CPU, MI_CLOCK, MI_ABOUT}},   /* (RESTORE LAST, CPU CORES, CPU CLOCK: at power-on) */
@@ -129,6 +129,9 @@ static const char *const SCROFF_N[5] = {"NEVER", "5 MIN", "15 MIN", "30 MIN", "6
 /* (JIANT 0.6.72) MIDI OUT over USB (ui.c midi_out_mode, seq.c MO_*): the keys; and the clock + START / STOP; and every
  * note the FM-1 plays; nothing */
 static const char *const MIDIOUT_N[4] = {"KEYS", "CLOCK", "ALL", "OFF"};
+/* (0.9.19) VIS FEED (ui.c vis_feed_off, visfeed.c): ON (the default) answers the JIANT Stems app's subscription with the
+ * synth's state for its visuals (JIANT's own SysEx, nothing until an app asks); OFF never sends it */
+static const char *const VISFEED_N[2] = {"ON", "OFF"};
 
 /* MENU > USB SERIAL (#67). The serial console is a developer tool (README: FELUCCA_CDC). ON (the default) presents it,
  * the descriptors byte for byte as before; OFF re-enumerates as audio + MIDI only, device class 0 (the bytes of a
@@ -187,6 +190,7 @@ static uint32_t menu_get(uint32_t row)
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: return rp_get(row - MI_CLICK);
     case MI_LOAD: return load_get();
     case MI_MIDIOUT: return midi_out_mode & 3u;
+    case MI_VISFEED: return vis_feed_off & 1u;
     case MI_CPU: case MI_CLOCK: return cpu_get(row == MI_CLOCK);
     case MI_LEARN: return ml.on;
     case MI_LEDS:
@@ -215,6 +219,7 @@ static const char *menu_vname(uint32_t row, uint32_t v)
     case MI_COUNTIN: return COUNTIN_N[v % 3u];
     case MI_LOAD: return N_LOAD[v % 3u];
     case MI_MIDIOUT: return MIDIOUT_N[v & 3u];
+    case MI_VISFEED: return VISFEED_N[v & 1u];
     case MI_CPU: case MI_CLOCK: return CPU_N[row == MI_CLOCK][v & 1u];
     case MI_SCROFF: return SCROFF_N[v % NELEM(SCROFF_N)];
     case MI_LEDS: return LEDS_NAME[LEDS_MENU[v % LEDS_COUNT]];
@@ -262,6 +267,7 @@ static void menu_put(uint32_t row, uint32_t v)
     case MI_LOAD: load_put(v % 3u); break;
     case MI_CPU: case MI_CLOCK: cpu_put(row == MI_CLOCK, v & 1u); break;   /* (0.9.12, cpu_safe.c) */
     case MI_MIDIOUT: midi_out_mode = (uint8_t)(v & 3u); break;
+    case MI_VISFEED: vis_feed_off = (uint8_t)(v & 1u); break;   /* (0.9.19: visfeed.c reads it every pass) */
     case MI_LEARN: ml_set(v); break;                   /* (0.9.12: armed, or off; not saved) */   /* (seq.c reads it every frame: ui_input) */         /* (at once: voice.c sys_load) */
     }
 }
@@ -271,7 +277,8 @@ static uint32_t menu_step(uint32_t row, int32_t s)
 {
     const menu_flag_t *f = menu_flag(row);
     uint32_t v = menu_get(row), n = menu_n(row);
-    if (f && str_eq(f->name[0], "ON"))                 /* (ANIM, USB SERIAL, RESTORE LAST: ON is their value 0) */
+    if ((f && str_eq(f->name[0], "ON")) || row == MI_VISFEED)   /* (ANIM, USB SERIAL, RESTORE LAST, VIS FEED: ON is
+                                                         * their value 0) */
         s = -s;
     if (s > 0)
         return v + 1u < n ? v + 1u : row == MI_COLOR ? 0u : v;
