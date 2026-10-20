@@ -37,7 +37,8 @@ FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_re
          "dly_lo",                                          # (0.8.4) the delay at half / a quarter rate (fx.c)
          "animal_render",                                   # (JIANT 0.8.3) ANIMAL (eng_animal.c): its five sources (one loop a voice)
          "formant_word_render", "formant_block",           # (JIANT 0.8.5) VOICE singing words (eng_formant.c, sing.c)
-         "djf_block"]                                      # (0.9.1) the master DJ FILTER (fx.c), while it is off the middle
+         "djf_block",                                      # (0.9.1) the master DJ FILTER (fx.c), while it is off the middle
+         "mix_dry"]                                        # (0.9.19) a part's dry mix and sends' input (fx.c mix_part)
 # built only with FELUCCA_FM4=1 (DIGITAL, src/eng_digital.c; not in the default build, so not in BUDGET): absent,
 # they are skipped; present, checked against these (their budget lines until the engine was retired in 1.0)
 OPTIONAL = {"digital_render": 12, "digital_render_legacy": 333, "digital_render_custom": 558,
@@ -79,15 +80,16 @@ def functions(path):
     return out
 
 
-def cost(insns, edges=None):
+def cost(insns, spans=None):
     """loops: one span per loop head (the farthest backward branch to it); an instruction inside d
-    spans weighs NEST ** (d - 1) (an inner loop runs several times per pass of the outer one). (0.9.19) edges: the
-    backward branches that close a loop (pi32_cycles.back_edges: not the jump back of a block laid out of line)"""
+    spans weighs NEST ** (d - 1) (an inner loop runs several times per pass of the outer one). (0.9.19) spans: the
+    loops as pi32_cycles.loops finds them (back edges that close a loop, not the jump back of a block laid out of
+    line; a rep loop's body)"""
     lo = insns[0][0]
-    heads = {}
-    for a, t in insns:
+    heads = dict(spans) if spans is not None else {}
+    for a, t in insns if spans is None else ():
         m = TARGET.search(t)
-        if m and lo <= int(m.group(1), 16) < a and (edges is None or a in edges):
+        if m and lo <= int(m.group(1), 16) < a:
             h = int(m.group(1), 16)
             heads[h] = max(heads.get(h, a), a)
     n = divs = calls = 0
@@ -132,7 +134,7 @@ def main():
         return 1 if fail else 0
     fns = functions(dis)
     parsed = pi32_cycles.parse(dis, set(FUNCS))
-    res = {n: cost(fns[n], pi32_cycles.back_edges(parsed[n]) if n in parsed else None) for n in FUNCS if fns.get(n)}
+    res = {n: cost(fns[n], pi32_cycles.loops(parsed[n]) if n in parsed else None) for n in FUNCS if fns.get(n)}
     cyc = {n: pi32_cycles.function(f) for n, f in parsed.items() if n in res}
     missing = [n for n in FUNCS if n not in res and n not in OPTIONAL]
     base = {}

@@ -10,7 +10,7 @@ callees the host compiler inlined into it (no host symbol of their own); their c
 group's costliest loop and its hazards.
 An estimate for ranking (it takes a host instruction for a target one), not the device's TIMER4 load meter.
   python3 tests/pi32_rank.py [-n N] [SECTION...]   (default: song/cputest mix/v12.c0 mix/v12; needs build/felucca.dis,
-                                                    valgrind; builds build/host/cpu_vg)"""
+                                                    valgrind; builds build/host/pi32_rank_vg)"""
 import glob
 import os
 import re
@@ -33,7 +33,7 @@ def main():
     if a[:1] == ["-n"]:
         top, a = int(a[1]), a[2:]
     secs = a or ["song/cputest", "mix/v12.c0", "mix/v12"]
-    binary = "build/host/cpu_vg"
+    binary = "build/host/pi32_rank_vg"           # (its own: not run_tests.sh's cpu_vg)
     subprocess.run(f"cc -O2 -w -Ibuild/gen -Ifirmware/src -Itests -o {binary} tests/cpu_vg.c -lm", shell=True, check=True)
     host = {ln.split()[-1].split(".")[0] for ln in
             subprocess.run(["nm", binary], capture_output=True, text=True).stdout.splitlines() if ln.strip()}

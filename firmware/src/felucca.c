@@ -34,6 +34,10 @@
 #ifndef FELUCCA_HOTRAM
 #define FELUCCA_HOTRAM 1         /* (JIANT 0.6.78, experimental) core 0's hottest audio code in RAM (core.h) */
 #endif
+#ifndef FELUCCA_REP
+#define FELUCCA_REP 0            /* (JIANT 0.9.19, experimental) the pi32v2's rep loops in the hottest small loops (fx.c
+                                  * mix_send); off until timed on the device (tests/pi32_cycles.py models them) */
+#endif
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_900"    /* package identity (build.py: the .fwsc marker string) */
 #endif

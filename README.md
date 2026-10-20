@@ -647,6 +647,498 @@ JIANT's modifications are distributed under the same license.
 
 Every update is listed here, newest first. (Since 0.6.80 at the end of the page: what the synth does comes first.)
 
+### Unreleased (dsp-pi32-099, on 0.9.9-cpu3)
+The sound's code timed against the FM-1's own processor: more headroom, the same sound.
+- **A cycle model of the pi32v2** (tests/pi32_cycles.py, run with the tests): the load, multiply and branch timing that
+  **zemuro (Ruslan Mazavin)** measured on the AC791N and published in Felucca's discussion #283 — thank you. It
+  reproduces his twelve timing rules and both loops he timed (FM6's operator, 40 cycles; upstream's metal source, 35),
+  estimates every render loop's cycles beside the old instruction count, and names its hazards (a loaded value or a
+  product used at once, an index used as an address at once, store runs, divides, taken branches and their targets).
+  tests/pi32_rank.py ranks the audio path's functions by it.
+- **ANALOG ~30 % fewer cycles a voice** (SAW, no NOISE: ~230 → ~163 a sample): the polyBLEP's edges, the NOISE and the
+  filter's soft knee are laid out off the straight path (a taken branch is 6 cycles, 9 once a loop has more than three
+  places to jump to), SAW goes first instead of through the WAVE's jump table. Every oscillator with a polyBLEP gains.
+- **The parts' mix** (each part into the mix and its three sends, 128 samples a part each audio half): the dry mix a
+  function of its own in RAM (it reloaded ~16 values from the stack every sample), each send that is on a loop of its
+  own: ~112 → ~86 cycles a sample with the sends on, ~92 → ~40 with them off.
+- **PHASE**: its wave's bend inlined in the loop (a call per wave, up to three a sample): ~17 cycles a sample with one
+  line, ~85 with LINE 2 and MORPH. **FM6**: the output's DC blocker kept in a register.
+- **FELUCCA_REP=1** (a build option, off until timed on the device): the sends' loop as the pi32v2's zero-overhead
+  `rep` loop, resumed after an interrupt as the vendor's own code does (~16 → ~12 cycles a sample a send, modelled).
+- All bit for bit (every golden render the same). Flash +1.5 KB (14.4 KB free), RAM code +260 B.
+
+### v0.9.18
+RATCH and ARP over the steps, the components regrouped, rolls that stay where they belong, COMP showing its step, and
+the BAR page gone; the LFO's MODE; the MENU as pages.
+- **RATCH spills over the steps after it.** RATCH and ECHO are one component: **RATCH x1–x8**, KNOB 3 the count and
+  its shape, **FLAT** (every hit at the step's level), **FADE** (each softer: the old ECHO) or **RISE** (each louder).
+  KNOB 4 its **RATE**: **FIT** spreads the hits over four steps on a synth and two on a drum kit, a note value fixes
+  their spacing, and a **pitch step** moves the hits after the first (+1 DEG, −1 DEG along the scale, +OCT every
+  other). The hits after the first now play on over the following steps instead of inside the step. A hit that lands
+  on a step with the same note of its own (a kit: the same sound) is left out; another note plays beside it on POLY;
+  on MONO and LEGATO the next note cuts the rest. The chance is rolled once for all of them. SEQ › CHANCE's x1–x4 is
+  RATCH FLAT and a project's ECHO is RATCH FADE (EVEN: FLAT). The live RATCH (GLO › LIVE) stays inside each step.
+- **ARP plays its notes one at a time at its RATE.** KNOB 4 **1/32, 1/16, 1/8, 1/4** (then the same with the loops it
+  plays on, 1:2 …; the other loops play the chord as written), KNOB 3 ORDER over 1–4 octaves (a single note: itself
+  and that many octaves up), through the step and its TIEs and at least once round, spilling on as RATCH does; on MONO
+  the next note cuts it. (0.9.17 played them inside the step.) ARP SEQ walks the melody a lap at a time as before.
+- **The components by family.** KNOB 2 goes OFF, CHANCE, RATCH, ARP, SEQ, WALK, PULSE, OCT, RAND, BEND, TONAL, JUMP,
+  REV, TRIG, FILL, KILL. **OCT** is now an octave every so many loops over 1–4 octaves (CLIMB's place, UP / DOWN /
+  UP-DN / RND). Retired and loaded as what they played: **ARP SCALE** (a WALK of the step's lowest note), the old
+  **OCT** modes (the notes moved an octave, or OCT with that motion), **TOUCH** (its SHORT / GHOST / FLAM as the mode of
+  each of the step's sounds), **CLIMB** (OCT), the long-hidden **C.LEN**.
+- **Rolls stay where they belong.** Not repeated with the step's RATCH: a sound with its own x2 / x4 / x8 on the grid
+  (the sound's mode wins, never a ratchet of a ratchet), a hit recorded live into the step (0.9.17's ONCE) and now also
+  a note recorded live into a ratcheted POLY step: each plays once, as heard. **GEN and the dice** write the drums'
+  rolls on their lane (the hat's x2 / x4, a fill's roll on its sound), not as the step's RATCH, so a kick under a
+  rolled hat no longer rolls. A sound's x2 / x4 / x8 spill as RATCH does (a hit, two, four a step); **OCT +3**
+  recorded on a DRUM track writes the sound's x4, two hits a step as heard.
+- **SEQ › COMP shows where the component goes.** The owner: adding a component and setting its step, the step was not
+  shown. The roll (a kit: the grid) now frames the step KNOB 1 picks, its whole column in violet with a tab at its foot,
+  at once as the knob turns; every step with the same component as the one edited has an orange bar on top, a step
+  with another component a thin line; a JUMP's TO STEP is framed orange as KNOB 3 turns. The cards' RATE now says the
+  spacing the hits really have (a RATCH's DIV over the spread, an ARP's 1/32 read 1/4 before).
+- **The SEQ › BAR page is gone** (the owner: redundant). The SEQ chain is eleven pages; the BAR group holds STEP and
+  NOTE. The bar is the roll's cursor and STEP's KNOB 1 over all 64 steps, which now accelerates when turned fast (KNOB
+  SPEEDUP, up to x4 on 64 steps); LEN is PATTERN's. The task race: bar 3 takes 13 actions turning fast (5 with BAR).
+- **Fix (tests):** the web editor's "PING keeps WATCH on" waits for the push instead of a fixed 10 ms.
+- **The LFO's MODE: TRIG or FREE, on its own knob.** The owner: "the LFO has no TRIGGER/FREE option... it always
+  retriggers." FREE was hidden at the left end of PHASE, and even there each new phrase still began the LFO again in
+  a way: its **FADE** started over from nothing, so with FADE up a FREE LFO faded in again on every note (and with FADE
+  at 0 it dropped out for one control block, 32 samples, at each phrase). Now **FREE never restarts anything**: a
+  note (apart, legato, from the sequencer, a DRUM-X hit) leaves the phase and the fade alone, and FADE fades the LFO
+  in only once, when the project loads (a song's next section keeps it going) or when MODE is turned to FREE. **TRIG** is as before: a new phrase restarts the LFO at PHASE and fades it in again. In time (RATE left of
+  the slowest) it follows the bar while playing in both modes, as it did.
+  - The **LFO** page is **RATE, WAVE, MODE, FADE**; **PHASE** moves to a new **LFO 2** page (after LFO in the chain),
+    dimmed in FREE. The caption over the wave says the mode ("1.18Hz · SIN · FREE").
+  - Nothing to convert: MODE is a view of PHASE, whose −1 is FREE as since 0.6.51, so every project and preset opens
+    and sounds as it was saved (a PHASE of FREE opens as MODE FREE, any other as TRIG at that phase). Turning MODE to
+    FREE keeps TRIG's phase for when you turn it back (until power-off).
+  - **LFO + SELECT** picks FREE half the time (was two in three), TRIG at any phase otherwise.
+  - The web editor shows the LFO's **MODE** (TRIG / FREE) and its **PHASE** (TRIG's) as the device does.
+- **The MENU follows the rest of the system** (users found it confusing: one long list with its own rules). Since
+  0.9.18 it is nine pages of up to four settings, in five tabs:
+  | Tab | Page | KNOB 1 | KNOB 2 | KNOB 3 | KNOB 4 |
+  | --- | --- | --- | --- | --- | --- |
+  | SCREEN | SCREEN | COLOR | SKIN | STYLE | LARGE |
+  | SCREEN | SCREEN 2 | SCOPE | ANIMATION | SCREEN SLEEP | — |
+  | SCREEN | LEDS | LED GLOW | SCALE LEDS | — | — |
+  | AUDIO | AUDIO | SPEAKER EQ | TRACKS | LOAD | BPM LOCK |
+  | AUDIO | CLICK | CLICK | CLICK LEVEL | COUNT-IN | — |
+  | MIDI | MIDI | MIDI OUT | LEARN | LEARN CLEAR | — |
+  | USB | USB | USB AUDIO | USB LEVEL | — | — |
+  | SYSTEM | CONTROLS | HOLD TIME | KNOB SPEEDUP | FX LATCH | CALIBRATION |
+  | SYSTEM | SYSTEM | RESTORE LAST | CPU CORES | CPU CLOCK | ABOUT |
+
+  **SELECT walks the pages, ALGORITHM jumps tabs, KNOB n changes the setting on card n** (until 0.9.17: SELECT walked
+  30 rows and any knob changed the selected one). OCT− / OCT+ step the setting you turned last. The tabs are whole
+  words (no more DISP / CTRL / SYS), the cards whole words where they fit (SPEAKER, CORES, SLEEP, CALIB, CPU MHZ, USB
+  AUD …; no two alike on a page, no marks), the values in their heat colours like every other card, the footer **MENU ·
+  AUDIO · CLICK 5/9** (a page named as its tab not said twice: **MENU · SCREEN 2**, **MENU · SYSTEM**). The SYSTEM page
+  holds what a power-on does (RESTORE LAST, CPU CORES, CPU CLOCK: from the next start) and ABOUT; CALIBRATION sits with
+  the controls it teaches. Under the
+  cards each setting has a row: its knob, its full name, its value and one plain line on what it does (for some, what
+  the value chosen does: USB AUDIO STEMS "8 CHANNELS: EVERY TRACK + FX"). **CALIBRATION, ABOUT and LEARN CLEAR** are
+  action cards: turn their knob right to arm them (the card says OCT+), OCT+ does it. Messages show as the usual pill
+  and go away on their own; HUD keeps its value row at the foot (it vanished in the MENU before).
+- **Renamed for plain words** (the settings themselves, their values and the editor's ids are unchanged; nothing to
+  migrate): ANIM → ANIMATION, LEDS → LED GLOW (DIM LO / DIM HI / INV → LOW / HIGH / INVERT), SCREEN OFF → SCREEN SLEEP,
+  HOLD → HOLD TIME, KNOB ACCEL → KNOB SPEEDUP, USB → USB AUDIO, CPU → CPU CORES. MIDI OUT stays in MIDI; USB AUDIO
+  moved next to USB LEVEL; CPU CORES next to CPU CLOCK (the crash message says MENU > SYSTEM > CORES); BPM LOCK beside
+  the engine's load on AUDIO; SCALE LEDS beside LED GLOW on SCREEN › LEDS.
+- **INIT SYSTEM left the MENU**: it was SAVE › TOOLS › NEW PROJECT under another name (same dialog, same UNDO).
+- The web editor groups the settings by the new tabs (it reads them from the device).
+- Flash: the image 568436 B, 15900 B free in the slot (the BAR page gave back 384 B; the MENU pages and the LFO MODE took more).
+### v0.9.17
+The glitcher, one piano roll across the SEQ pages, a livelier generator and dice, slower rolls, ARP SEQ a lap at a
+time, VOICE's THEME, and two fixes.
+- **The glitcher (FX layer).** While **GLITCH, TAPE STOP, FREEZE or SHUFFLE** is down (held, or pressed with FX LATCH)
+  the four knobs are its own; let it go and they are the macros again. The cards and the footer name it.
+  - **GLITCH** (B3): **DENS** how many sixteenths are cut, **PITCH** each repeat that many semitones above or below the
+    one before (a riser, or a fall), **SIZE** the repeated slice from a 1/16 down to a 1/256, **VARI** another pattern.
+    New slices: **SKIP** (tiny fragments of the last 1/16, like a CD skipping) and **CRUSH**.
+  - **TAPE STOP** (C4): **TIME** (1/64 to a beat) and **CURVE** (− drops at once, + holds then drops). Once stopped,
+    **KNOB 1 SCRATCH** is your hand on the record: the end of the music, back and forth, its pitch with the speed.
+  - **SHUFFLE** (C#5, new): the last bar's 1/16s (1/8s, 1/4s) played back in another order, **AMOUNT** of them, some at
+    half or double speed (**SPEED**); the bar is kept compressed (ADPCM) in the same buffer.
+  - **FREEZE** (G#4, new): the eighth after the press held as grains, **DENS PITCH SPRAY SIZE**.
+  - **The FILTER sweep is gone**: KNOB 4's FILTER macro is the layer's one filter, and C#5 is SHUFFLE (a punch-in lane
+    that recorded the FILTER sweep now plays SHUFFLE there). The glitcher costs nothing at rest.
+- **Every SEQ page is the piano roll.** The owner, on the emulator: "Why does it say PLAYHEADS on the sequencer
+  pages? ... all the sequencer pages should have the same piano roll, each page doing something different on top of
+  it." All twelve SEQ pages now draw the same picture, the pattern's bars in a strip and the cursor's bar as the roll
+  (a kit: the grid), the page's marks over it: PATTERN the notes as long as GATE plays them and the odd steps late by
+  SWING; TRACK the notes moved by PITCH outlined; PLAYHEADS the extra heads as lines while they play (the head edited
+  3 px; the separate lanes are gone); COMP / COMP 2 a bar over each step with that component; AUTOMATION and AUTO LIST
+  a mark under each record's step (AUTO LIST's row framed); MUTATE a chip with the bars to the next mutation (FROZEN,
+  MUTATE OFF). STRETCH, BAR, STEP and NOTE the roll as it was. The "PLAYHEADS" caption over PATTERN's roll is gone
+  (playheads live on the PLAYHEADS page only), as are PATTERN's big bars, the step drawn large on COMP, and MUTATE's
+  and AUTO LIST's own panels (the cards say the same). PHRASES and SONG keep their lists.
+- **The values on top on every SEQ page, in every skin.** The BOTTOM skin (its knob row at the foot put the values
+  under the pictures) is retired: MENU › DISPLAY › SKIN steps AIR, COLORS, HUD (the editor's list too); a BOTTOM saved
+  in the settings, or set by the editor or a restore, opens as AIR, the same word tabs with the row on top. HUD keeps
+  its row at the foot except on the SEQ pages, where it is on top as AIR's.
+- **SEQ + SELECT dices with GEN's own generator.** The track's new sequence is the part GEN would write for it: on the
+  song's harmony when GEN made the piece (its plan, genre and the track's role), so it fits the other parts; otherwise
+  a piece's choices made up for it (the last genre, or any, in the track's key). DRUM tracks get drums; other tracks
+  get the role their steps sound like (low notes a bass, chords a pad, else a lead or an arp). Its sound, mix and
+  automation stay. song_dice.c's own generator is gone (7.2 KB of flash back).
+- **The dice never repeat themselves.** Each press mixes its moment into the random numbers. A throw never brings back
+  the part, seed or preset of the throw before (an engine's last four presets are skipped). GEN's SEED starts each
+  session somewhere new: the first OCT+ after power-on made the same piece every time. Bass lines vary their archetype
+  from throw to throw.
+- **GEN's sounds.** Leads and arps get their own envelope shapes, with releases that fit the tempo. Filters start
+  darker and open with an envelope, with more resonance. Leads get soft LFOs on the filter or a faster vibrato, and
+  percussion gets its sends. Every word of the recipe now shapes the sound.
+- **GEN's melodies.** The lead runs over four bars as a call and an answer, built from syncopated motif cells with a
+  late variation. The arp leaves space shaped like a figure of the bar, with ghost notes and held notes, and has three
+  new orders.
+- **DRUM-X's octaves above the kit, half as fast again.** Holding a key above OCT 0 on a DRUM track now plays **OCT +1
+  REPEAT 1/2** (the hit every other step), **+2 REPEAT** (once a step) and **+3 RATCHET x2** (0.9.16: once, x2, x4 a
+  step). The same goes for MIDI notes 82–93, 94–105 and 106–127. Recording writes what you hear: +1 a hit on every other
+  step held, +2 one on each, +3 the step's sound at x2. Steps recorded before keep the modes they stored.
+- **ARP SEQ walks the melody one note a lap.** A step with the ARP SEQ component (SEQ > COMP) no longer plays the
+  pattern's melody inside the step. Each time the pattern comes round to it, it plays the **next** note of the melody,
+  in its ORDER and over its range, held over the TIEs after it like any note. PLAY from a stop starts again from the
+  first note, as the loops of TRIG, EVERY, WALK and CLIMB do. On a drum kit the pattern's sounds take their turns the
+  same way. SEQ's KNOB 4 was RATE: it is now **LAP**, the note this pass plays (RND: a new one each lap). Projects keep
+  the RATE they stored, now unused. ARP NOTES and SCALE play as before.
+- **VOICE's THEME: one detent a theme, and no crackle.** THEME (WORDS) took 16 detents a name. Now every value with
+  names steps one name a detent, onto the name's middle: THEME and LOOP; LOFI's WAV#, DECAY and ALGO; NOISE's LEN.
+  The stored 0..127 values, projects, presets, automation and the editor are unchanged. Swept over a held note THEME
+  crackled: each of its values counted as a new "list value" and dipped the voice (2.7 ms out and in), though THEME
+  only chooses the next words. Now THEME and LOOP never dip, and the other named values dip only when the name
+  changes. The theme changes at the next word.
+- **THEME between its detents: a blend.** Automation, a mod or an older project can set THEME between two detents.
+  The lower half of a theme's 16 values (the detent included) sings that theme exactly as before. The upper half mixes
+  in words from the next theme, from 1 in 8 up to 7 in 8.
+- **Fix: a drum hit recorded into a RATCH or ECHO step rolled.** Finger-drumming live into a step that already had a
+  RATCH or ECHO made the new hit repeat with the step ("random rolls"). A hit recorded so now plays once (the lane's
+  ONCE mode); the step's other sounds keep their ratchet. Projects store it.
+- **Fix: CLOUD silent at SIZE 100 %.** SIZE at its top freezes the grain buffer; after the buffer had been cleared
+  (a new project, the reverb switched) it froze an empty line and went silent. It now fills before it freezes, and
+  the grains' overlap limit no longer drops the level 12 dB.
+- Flash: the image 565072 B, 19264 B free in the slot (0.9.16: 12992 B free; the SEQ pages' old pictures and
+  song_dice.c's generator gave back more than the glitcher and the rest took).
+### v0.9.16
+The idle floor.
+- **At rest the audio does almost nothing.** An owner's PROFILE on 0.9.14, stopped and silent: 21 % of the audio's time
+  (SEQUENCER 7.6, MASTER 4.7, the six empty tracks 5.3, FX LAYER..CLIP 2.6, the buses 1.2, core 1 1.6). Now, once the
+  transport is stopped, no track has a voice, a DIST tail or a fade, the effects rest and the master has settled, a
+  block renders nothing: no track, no master chain, no job for the second core; the LFOs, DRIFT's clock and the
+  engines' block work go on, so the next note comes out exactly as it would have (tests/hush_test.c renders a session
+  both ways: bit for bit). Before that, while sound fades, the master stops on its own as soon as its input is 0 and
+  its states can no longer move (bit for bit too). With SPEAKER EQ LOWCUT / BASS+ the master keeps running.
+- **SEQUENCER at rest**: every block, for every track, the engine was asked to describe all eight of its parameters
+  (to notice a list value changing under a note): 48 calls into six engines' code a block, stopped too. Now only for a
+  value that changed.
+- Host (callgrind, both cores' work): the CPU TEST song stopped, 336 → 120 instructions a sample (tests/cpu_vg.c
+  idle/stopped); 30 EXPLORE pieces 20 s after STOP, 516 → 111 (0.9.13: 1533). Playing: unchanged.
+- The load meter (ABOUT's NOW, PROFILE's WHOLE HALF) is core 0's time in the audio interrupt, its wait for core 1
+  included (it is the deadline), the keyboard / USB interrupt nested in it left out; the drawing is never in it. It
+  read 20 % at rest because 20 % was being spent; it was not overstated.
+- For the flash's room: PROFILE no longer has 0.9.14's "EXPLORE: DEVICE x" line and the "CPU TEST: SEE ABOUT"
+  message is gone; the CPU TEST line on ABOUT and on PROFILE stays.
+- **The screen's small and medium text at two sub-pixel phases** (were four; the large face has had two since 0.5):
+  12912 B of flash back (the image 571344 B, 12992 B free in the slot). A letter still sits within 1/4 px of its true
+  place and a gap between two neighbours within 1/2 px (S 0.43 px at worst, M 0.40); the drawing code is unchanged.
+
+### v0.9.15
+The FX layer, reworked.
+- **The FX layer reworked: sweeps, GLITCH, TAPE STOP and performance macros.** CRUSH, THROW and FILTER leave the knobs
+  (and LPF / HPF the keys B3 C4) and become **sweeps** on the free black keys: **C#5 FILTER** (the master DJ FILTER's
+  high-pass opening, ~32 Hz → ~6 kHz), **D#5 CRUSH** (bits and rate down, its mix up), **F#5 THROW** (the dry mix into
+  the delay and reverb, up to all of it). Held, each goes from dry to wet over **2 bars at the tempo** on an S curve
+  (slow out of dry, slow into wet); let go, back to dry in **a beat**.
+- **GLITCH** (B3): the master cut on the transport's sixteenths into live slices, repeats of the last 1/16 … 1/64,
+  the last sixteenth reversed or an octave up or down, and 1/32 – 1/64 gates; the downbeats mostly left alone, the
+  pattern a two-bar cycle fixed to the transport, so it grooves and comes back the same. Every slice windowed (no
+  clicks). It borrows REPEAT's buffer (the SLICER's 32 KB); no new memory.
+- **TAPE STOP** (C4): the master slows to a stop over a beat (at most 0.68 s), pitch and all, then silence while held;
+  let go, the music at once. The transition the set lacked (REPEAT and GLITCH cut time, the sweeps colour it, nothing
+  bent it): one press at the end of a phrase.
+- **The knobs with FX are now four PERFORMANCE MACROS** on the whole project, built up turning right: **STEPS** (every
+  sequence's playing length 1/2, 1/4, 1/8, one step, from where it plays, on the next sixteenth; the tracks back in
+  phase when off), **TRANSPOSE** (+2ND +3RD +4TH +5TH +6TH along the scale, +OCT, -OCT; three detents an interval;
+  the drums untouched), **MUTATE** (the patterns mutated around the music as it was, every bar; off, exactly as it
+  was) and **FILTER** (the DJ FILTER's low-pass closing). **Turn any of them back (two detents) and all four are off at
+  once** (MACROS OFF): a sudden return to the original. They stay when FX is let go; never saved, never recorded.
+- **The punch-in lane records GLITCH, TAPE STOP and the sweeps** too (lane values 11–15), played back on their steps.
+- Host cost (callgrind, x86-64, the perform test's song, 1999 instructions a sample idle): REPEAT 1/16 +108,
+  GLITCH +144, TAPE STOP +147, CRUSH +67, THROW +73, FILTER sweep or macro +147..199 (the DJ FILTER's own cost),
+  GLITCH and the three sweeps together +324; nothing at all while idle (bit for bit).
+- **The flash made room for it** (0.9.14 had 76 B free), with the sound and its per-sample code unchanged: more of
+  the code that runs once an event (a note found a voice and started or ended, a key, a section or song row, the FX
+  layer's buffer effect started, the PUNCH lane's steps, the engines' note-ons and descriptions, the power-on LED
+  sweep, a fault) built for size, and kept a call where the interrupts' fast code reached it (inlined there it was
+  built for speed: the USB control requests in TIMER5's scan, the chord glide, the arp's notes), and identical
+  functions merged; the sound's code still first in the image. Image 584116 B, 220 B free.
+
+### v0.9.14
+CPU: measured on the FM-1 instead of estimated on a computer, and lighter where it was wasted.
+- **MENU › ABOUT › PROFILE (OCT+ on ABOUT): where the audio's time goes, measured on the device.** Every 725 µs block
+  is timed where it runs (the 24 MHz timer, either core): the sequencer, **each track** (its engine; C1 when it runs
+  mostly on the second core), the **effect buses** (and of them the reverb, the rest the delay and chorus), **core 0
+  waiting for core 1**, the FX layer to CLIP, the master, USB and the output, core 1 busy, the keyboard / USB interrupt
+  inside the render and the **whole half** (= AUDIO LOAD); then the interrupt in all, the audio interrupt's latest
+  start (µs: the screen or a flash write holding it), the late halves, how much of the time the buses rested, the UI's
+  frames a second. Each row: the mean and the worst block of **the last second playing**, then of **the last second
+  stopped** (grey), in % of a block. It measures from the first time it is opened until power-off. **Please photograph
+  it** (SELECT scrolls: two or three photos) while a song plays and after STOP, and send it with the song: that is what
+  the next version is tuned on.
+- **CPU TEST measured.** SAVE › TOOLS 6 CPU TEST, then PLAY for 10 s or more and STOP: its mean load is kept with the
+  settings and shown on ABOUT and PROFILE (CPU TEST 98 % (2 CORES)). EXPLORE uses it (below).
+- **Stopped, the effects cost nothing.** On 0.9.13 the reverb, delay and chorus ran every sample forever, even
+  stopped and silent (with CLOUD two thirds of a stopped song's load on the host): that was ABOUT's NOW 26 % while
+  stopped. Now once their gate has shut (1.5–8 s after the last sound reached them) they rest, their lines silenced
+  over the first blocks (no ghost of the last tail at the next PLAY). Host, 30 EXPLORE pieces 20 s after STOP: 1533 →
+  529 instructions a sample (–65 %); the power-on parts at rest: 835 → 571.
+- **GEN's FM6 chords no longer ring for minutes.** GEN's long releases (REL 78–104 on chords) took an FM6 patch's
+  release rate R4 down to 1: every chord's voices sounded on for minutes after the notes and the transport stopped,
+  at the cost of the heaviest engine (4 of 17 EXPLORE pieces still had them 20 s after STOP). GEN now keeps an FM6
+  part's R4 at 40 at least (~4 s at most), and EXPLORE's estimate counts FM6's own release.
+- **EXPLORE budgeted for the device, not the host.** The 0.9.13 budget took the host's instruction counts as the
+  FM-1's; the FM-1 runs its code from the flash through a 32 KB cache the two cores share, so every engine and effect
+  a piece adds costs more there (an owner's FM-1: ~90 % where the estimate said ~62 %). The estimate is now scaled by
+  the device: its CPU TEST if it was measured (the host holds CPU TEST at 63 % with two cores), else ×1.6. Host, 60
+  pieces at COMPLEX 50: 717 → 502 thousandths of CPU TEST; 30 pieces played, both cores: 3063 → 2402 instructions a
+  sample (core 0's path 1449 → 1171), every piece still with two melodic parts.
+- **The load governor acts sooner.** Over the budget 3 halves in a row (was 6): a voice less for all tracks; past 75 %
+  (62 % on ECO, 70 % on one core), a voice less every half, and at the minimum of 4 still past it for 8 halves, LOAD
+  LITE by itself — before the guard's 80 % fades voices.
+- **CLOUD no longer crackles when pushed.** Its grains were summed however many overlapped, and at a high RATE (from
+  ~90, any SIZE) the loop's gain passed 1: the line ran into its clamps and the limiter crushed it. Now the grains'
+  overlap is capped (the loop always dies away), the line bends through a soft knee instead of clamping, the grains
+  enter the room at half the level (6 dB more headroom), a ~14 Hz low cut keeps a DC from circling, and with AIR high
+  no grain reads across the write head (a click each). ROOM, SPRING, SHIMMER and RESO bit for bit as before.
+- **The flash**: the code that runs once an event (a step, a note, a MIDI message, a USB request, a sung word) and not
+  once a sample is now built for size, as the UI is (~2.3 KB: the room PROFILE and the CLOUD fix needed); the sound's
+  own code is unchanged and still first in the image (layout: no function an interrupt reaches fell out of it). Image
+  584260 B, 76 B free: the slot is full, the next feature needs room made first.
+
+### v0.9.13
+- **Songs past four tracks no longer run the CPU over: a load governor.** On 0.9.12 a song of five or six tracks could
+  take more than the FM-1 has, and the guard (a voice faded at 80 %) came too late. Now, every 2.9 ms half: over the
+  load budget (65 %, 55 % on one core) six halves in a row, **one voice less for all the tracks** (down to 4; the
+  oldest released ones go first); a voice faded by the guard, two less; half a second under the budget, one back. If the
+  guard still has to fade voices twice in a second, the sound goes to **LOAD LITE on its own** (CLOUD and SHIMMER play
+  as ROOM, RESO as SPRING, the GRAIN delay plain, FM6 two voices) until 5 s of calm; MENU › SYSTEM › LOAD stays as you
+  set it. Measured on the host (callgrind, a six-track song: DRUM-X VOICE ANIMAL LOFI ANALOG FM6 in chords, CLOUD,
+  delay, chorus; and a heavy one: DRUM FM6 PHASE WHEEL NOISE FM6): one core 2258 / 2509 instructions a sample; two
+  cores, the longer of the two cores' paths, 1642 / 1593 with 12 voices, 1229 / 1434 at 8, 1066 / 1218 at 6. 0.9.12's 12
+  voices on two cores cost 14–22 % more work than 0.9.9's 8 in all; the governor now takes that back when it is needed.
+- **After a crash, both cores again after three power-ons.** 0.9.12 turned 2 CORES off for good after any crash with
+  both cores at work, and a unit left on one core plays every song with ~1.5x the load. Now 1 CORE lasts two
+  power-ons; the third starts both cores again. A second crash with both cores after that: 1 CORE for good (ABOUT:
+  CORES 1 (AFTER 2 CRASHES)) until MENU › SYSTEM › CPU. Check MENU › ABOUT: CORES 2 is what the FM-1 should say.
+- **EXPLORE less extreme by default, and inside the CPU.** COMPLEX is now how wild EXPLORE goes: at the default 50 the
+  pieces are adventurous but musical (tempos 80–165, the commoner modes more often, polyrhythm on three tracks at most,
+  fewer PLAYHEADS and out-of-key colours); at 100 every rule broken as before. Each piece is estimated (its parts by
+  engine and voices, the reverb, the delay's grain, PLAYHEADS) and made lighter until it fits 65 % of the audio's time
+  with two cores, 55 % with one: a heavy engine as LOFI or ANALOG, CLOUD / SHIMMER as ROOM / SPRING, the texture, arp
+  or lead left out, the grain off, fewer PLAYHEADS and chord notes. Host scan of 500 seeds against the CPU TEST song
+  (its mean taken as ~63 % of a half with two cores, ~77 % with one): two cores, the mean load at most 0.98x CPU
+  TEST (62 %), the 99th percentile of the halves at most 1.12x (71 %); one core, mean at most 0.80x (median 0.60x,
+  from 0.75x), 18 pieces of 500 a little over 55 % (the floor: drums, bass, two-note chords). The genres and RANDOM are
+  not trimmed. MANUAL › GEN.
+- **GEN's sounds move, and no more sirens.** The lead (track 5 of six) had a 1–2 semitone pitch wobble at 1–2 Hz half
+  the time, plus whatever LFO its preset carried. Now every sound starts with its LFO routes cleared; a **vibrato only
+  on a held lead** (now and then a held pad): a fifth of a semitone, ~5 Hz, fading in. The **filter moves** on almost
+  every melodic part (its envelope, and on chords, arps and textures often a slow LFO over one, two or four bars at the
+  genre's tempo), and each role has a **release** of its own (bass short but never a click, chords long). **Chord
+  progressions** on 97 % of the pieces (79 % before; one-chord pedals now and then), the arp following the chords;
+  ANIMAL a quarter as often in EXPLORE.
+- **DRUM-X octaves half as fast.** Held keys on a DRUM track above the kit's octave: **+1 REPEAT** (the hit once a
+  step, a roll), **+2 RATCHET x2**, **+3 RATCHET x4** (were x2, x4, x8); recorded as heard. MIDI's bands the same.
+- **More room in the flash**: the app's slot grows by 2772 B (to 584336 B), up to where every loader already writes
+  (0x93000): no change to the update loader, the package or the installers. Image 582900 B, 1436 B free (was 1248 at
+  0.9.12 with 580316 B).
+
+### v0.9.12
+A beta (the emulator and `preview/webapp/installer/`); the official installer stays on 0.9.9 until it is tested on
+the device.
+- **The crackle of 0.9.10 / 0.9.11: the sound's code pinned in place (candidate fix).** On the owner's FM-1 0.9.9
+  played clean and 0.9.10 / 0.9.11 crackled on every output, the load meter up to 94 %, while the host measured the
+  same work. Nothing in the sound changed in 0.9.10, and the code that runs from RAM is byte for byte 0.9.9's. What
+  changed is *where* the rest of the sound sits in the flash: the FM-1 runs most of its code straight from the flash
+  chip, through a small cache that keeps only a few KB of it close at hand. Code at some addresses competes for the same
+  cache places as other code and keeps throwing it out, so the same work costs much more. 0.9.10's two new drawings
+  (VOICE's tract, LOFI's chip: +6 KB of screen code) came before the engines in the image and pushed every engine's
+  render 6 KB further (analog_render 0x020573F8 → 0x020598BE) while the effects and the mix stayed where they were: the
+  renders and the effects now collided in the cache. Now everything an interrupt reaches (the renders, the effects, the
+  second core's jobs and their tables: 350 functions, 244 tables) comes first in the image, in name order
+  (`tools/build.py audio_sections`, `app.ld`), so a change of the screens can no longer move the sound. To be confirmed
+  on the device (SAVE › TOOLS › 6 CPU TEST, MENU › ABOUT › AUDIO LOAD).
+- **Safe by default on FM-1s that crash.** Some FM-1s crash now and then (a red "JIANT CRASH" / "FELUCCA CRASH"
+  screen, even idle) since both cores work (0.6.71). Now:
+  - **MENU › SYSTEM › CPU: 2 CORES / 1 CORE**, kept with the settings (2 CORES by default, as before; editor id 23).
+    A crash or a hang (watchdog) while both cores ran, or the second core giving up (a misread, no answer, a fault),
+    **turns 2 CORES off for good**: the next start says **2 CORES OFF AFTER A CRASH — MENU › SYSTEM › CPU** and ABOUT
+    reads **CORES 1 (AFTER A CRASH)**. Until 0.9.11 that lasted only until the FM-1 was switched off.
+  - **MENU › SYSTEM › CPU CLOCK: 360 / 320 MHZ** (editor id 24): JieLi rates the chip at 320 MHz; the FM-1's boot runs
+    it at 360. Switched at power-on, before the audio and the second core, with curist's switch from
+    [fm1-clk320-probe](https://github.com/curist/fm1-clk320-probe) (MIT, `firmware/hal/fm1_clk320.h`), as
+    [Skiff](https://github.com/illuminus5/skiff) does. ~11 % less CPU: the load governor sheds voices sooner on the
+    heaviest songs. ABOUT shows the clock it runs at.
+  - **One core: the load budget a little sooner** (55 % instead of 65 % of a half before new voices wait), so the peaks
+    have room without the second core.
+- **The crash screen says more**: the version, the core that faulted and how many ran, a short code (IL illegal
+  instruction, BU bad address, ST stack, ...; MANUAL › Troubleshooting) and the five numbers labelled (VEC PC EMU DBG
+  RETS, the same as every crash screen since Felucca, now named).
+  - **The last crash is kept** in the settings record (also after a power-off): MENU › ABOUT › LAST CRASH, the
+    editor's settings backup, the console's `crash`. A hang (a watchdog reset) is logged too (code WD).
+  - `tools/crash_decode.py`: a photo's numbers to the function that failed, from the build's ELF.
+- **Fixed: the flash written while the second core worked.** Every flash erase, write and read turns the flash off
+  (interrupts off); the second core's jobs from the audio interrupt were always back by then, but the 48 kHz USB
+  resampler's (0.8.9) runs on after it: a fault in it then would have run the exception vectors from a flash that was
+  off. Now the flash driver waits for the second core first (`fm1_mc_park`).
+- **USB audio: fewer register round trips in TIMER5** (0.9.10 polled the endpoint on every 10 kHz tick, also inside
+  the audio render): a packet just queued is not polled for 0.6 ms (it cannot have gone yet), ~4 polls a ms instead of
+  ~10, the stems timing as 0.9.10.
+- **12 voices with the second core** (after [Skiff](https://github.com/illuminus5/skiff) by illuminus5): while two cores
+  actually run (MENU › ABOUT CORES 2), the tracks share **12 voices** instead of 8; one core (MENU › SYSTEM › CPU
+  1 CORE, 2 CORES turned off after a crash, REC at power-on, a core given up mid-session: from the next note) keeps 8,
+  LOAD ECO 6. A track still has 8 of its own (no RAM more). The load control stays in charge: the load budget and the
+  overload guard (80 %) measure core 0's half with its wait for core 1 in it, so they keep the render in time either
+  way. Measured (callgrind, `tests/cpu_vg.c`, six ANALOG / FM6 chords, 24 notes held, every FX on): one core with 8
+  voices 3241 instructions a sample; two cores with 12, 3925 in all, **1949 on core 0** (the audio ISR's own share: 60 %
+  of one core's with 8). `tests/regress.c` (12 / 8 / 8 REC / 6 ECO, each part ≤ 8, a core lost), the dual-core test
+  compares one core and two at the same budget.
+- **Sound types and PRESETS by type** (after Skiff): every factory preset has a type, **BASS LEAD PAD KEYS PLUCK
+  BELL VOX DRUM FX**, in the free bits of its MONO byte (no format, nothing stored changes). SAVE › PRESETS' **LIST**
+  (KNOB 4) steps ALL → FAV → BASS … FX: KNOB 1 and the PRESETS knob then browse that type over every engine. The type
+  is kept with the settings (a byte no engine uses; older settings: ALL). The generator (GEN) keeps bass sounds off the
+  other roles by the type instead of their names (a REESE is now a bass too). PROGRAM CHANGE numbers stay those of ALL.
+- **MIDI LEARN** (ported from Felucca 1.5's, by Leo Kuroshita): **MENU › MIDI › LEARN ON**, turn a knob on any page
+  that edits a track's parameter, send a CC: learned (**CC21 > T2 CUT**), then it sets that parameter as the knob does
+  (and is recorded as automation) on any channel ROUTE hears, over USB and TRS. Ten at most; one CC a parameter;
+  **LEARN CLEAR**; the reserved CCs (CC0 1 6 11 32 38 64 96–101 120–127 and the standard map's 5 7 10 16–23 71–75 91 93
+  94 102–105) refused ("CC7 RESERVED") and doing their own. Kept with the settings (in the favourites row of the
+  retired DIGITAL engine, 30 bytes; older settings: none learned), not in projects. Its state in the pool (8 B), none
+  among the audio ISR's globals.
+- **MENU in five tabs: DISPLAY · CONTROL · AUDIO · MIDI · SYSTEM.** **MIDI** is new, before SYSTEM (as Felucca 1.2's):
+  MIDI OUT (moved from CONTROL), LEARN, LEARN CLEAR. **LOAD** moves to **AUDIO** beside TRACKS (as in GLO › SYSTEM);
+  **SYSTEM** holds USB SERIAL, RESTORE LAST, CPU, CPU CLOCK, CALIBRATION, INIT SYSTEM, ABOUT (seven). The editor sees
+  MIDI OUT in the MIDI tab and LOAD in AUDIO (their ids unchanged; SYSTEM's tab index 3 → 4). The tabs show short names
+  when five do not fit (DISP CTRL AUDIO MIDI SYS); MENU's tile view (renders only since 0.9.2) is gone.
+- **Parameter locks: choose the page while you hold the step.** Until now a step's knobs locked the four of the sound
+  page visited last, so locking DECAY and then FOLD on one drum step meant leaving SEQ › STEP for EDIT and back, twice.
+  Now, with a step held on SEQ › STEP (the roll's entry or a DRUM grid key), **SELECT walks the track's EDIT pages**
+  (the same chain as SELECT on EDIT, less the pages that cannot lock: DRUM's SOUND 1–4, KIT 3 and X-MOD hold the kit's
+  own values; FOCUS and FM6's operators): DRUM-X KIT → KIT 2 → LEVELS → LEVELS 2 → FILTER → STEREO → VOICE, a synth
+  EDIT 1 → EDIT 2 → FILTER → MORPH … Without leaving STEP the cards show that page's four (locked bright, the sound's
+  own DIM) and the footer says **LOCK · KIT 2  2/7**; the knobs lock them on the held step(s). Let go and the page
+  stays the locks' (the next hold starts there; EDIT opens on it). SELECT with a step held used to leave STEP; with
+  none held it walks SEQ as before. DRUM-X: the lane picked with the black keys gets the hit, the lock stays the
+  step's (LEVELS locks one sound's level). The manual's *Parameter locks* also says plainly what clears what since
+  0.9.2 (EDIT never clears a step; SEQ + G5 does; a held step + EDIT clears only its locks) and points to SEQ › AUTO
+  LIST to edit a lock or recorded automation on a particular step.
+- **The USB name is "JIANT", and Windows finally shows it.** Ableton Live (and every Windows program) kept listing the
+  FM-1's MIDI port as "Felucca" long after JIANT renamed it: Windows' USB audio driver stores a MIDI port's name in the
+  registry under a key made of VID, PID and the product string's *index* (not its text), the first time it sees the
+  device, and never reads it again; Felucca and JIANT shared all three (1209:0001, index 2). The product string moves to
+  index 4 (`firmware/src/usb.c` USB_STR_PRODUCT), a new key, so the host reads the name again, and reads **"JIANT"**
+  (was "JIANT FM"): the port in Live / Windows is "JIANT", on macOS the device and its port "JIANT", on Linux
+  "JIANT MIDI 1". The manufacturer stays "Juan Jiant", the update loader "JIANT Update" (also on the new index);
+  VID/PID and bcdDevice unchanged. The installers (web and `tools/fm1_install.py`) and the editor tell the firmware by
+  its identity and INFO reply, not by the name, and accept "JIANT", "JIANT FM", "Felucca" and Windows' numbered names.
+  macOS may keep a renamed device's old name in Audio MIDI Setup: delete the old FM-1 entry there (unplugged) once.
+- **The FM6 voice bank's sector is checked before it is used**: Skiff keeps its pattern bank at 0xE7000, where JIANT
+  keeps the FM6 voice bank. A bank there was already read only with its commit record and CRCs right; now the power-on
+  also never erases that sector to finish a copy unless it is erased or holds a bank of ours (another firmware's data
+  reads as no bank and stays as it is) — only a bank you send from the editor writes over it. `tests/fm6bank_test.c`.
+- **Copyright**: "Copyright (C) 2026 Juan Ignacio Antonucci (Juan Jiant)" in the header of every file JIANT wrote
+  ("Portions Copyright" in the Felucca files it changed substantially), Felucca's lines kept; README, LICENSING.md and
+  MENU › ABOUT (which now names Felucca and Skiff in its credits) say so. The license is unchanged.
+- Memory: image **580316 B** of 581564 (0.9.11: 576192; 1248 B free); .data + .bss **79556 B** of 98304, pool spare
+  **9504 B**, RAM code **22812 B** of 25600 (1 KiB more room, from the pool, for the 320 MHz switch). cpu_vg: every case within its baseline (two cores, 12 voices: 1949 instructions a sample on core 0).
+  The navigation map and the cheat sheets regenerated at v0.9.12.
+
+### v0.9.11
+- **GLO › LIVE: the six sequences in parallel, with live modifiers** (the approved mock-up *secuencias*, its MANO and
+  RIELES versions), a new first group of GLO (**LIVE · MIX · GLOBAL · SYSTEM**; at power-on GLO still opens the MIXER).
+  **MANO** makes the keys a performance board: the black keys 1–6 pick the tracks while held (several at once, none =
+  all), the white keys are momentary modifiers (/2 x2 3/2 2/3, LOOP 8 4 2 1, REV, PING, RATCH x2 x3, THIN, OCT±,
+  RETURN) with a LATCH key, GIRO and RND; KNOB 1–3 RATE LOOP THIN, KNOB 4 the DJ FILTER; off the page the keys play
+  notes again. **RIELES** draws six rails, each loop at its own length with its playhead and its ghost; KNOB 1 PISTAS
+  (ALL, then T1 … T6, SYN, DRM), KNOB 2 RATE (/4 … x4 with 2/3 and 3/2, on the next beat), KNOB 3 CORTE (the first N
+  steps), KNOB 4 DENS (THIN ← → RATCH x2–x4). Both pages drive one set of modifiers per track (the knobs a latched
+  layer, MANO's keys on top). Never destructive: a ghost playhead keeps each track's true place; OCT− tapped RETURNs on
+  the next beat, held is BYPASS (the original), OCT+ twice COMMITs into DIV (or STRETCH), LEN, ROTATE and CHANCE, with
+  UNDO (GLO + G4). Recording while modified writes at the ghost's step. Not saved (performance state). Nothing in the
+  audio render (cpu_vg song/cputest as before); the sequencer alone: see seqtick/plain vs seqtick/live in
+  tests/cpu_baseline_vg.txt. Flash +7108 B (image 568940 → 576048 B), .data + .bss unchanged, the pool's spare
+  10784 → 10528 B, RAM code 22460 → 22512 B. tests/live_test.c; the manual's § 11.
+- **LOFI quieter and less piercing, BYTEBEAT above all.** Coming to LOFI from another part (T5's FAT BASS → T4's
+  BYTEBEAT, worse after a quiet one) was a jump and a fright. In LUFS LOFI measured as loud as the others (the master's
+  leveler evens out peaks), but its waves are full-scale and dense, spread over the whole spectrum: a Zwicker-style
+  loudness put the factory presets' median 6 phon over the melodic engines' (BYTEBEAT over the loudest ANALOG preset),
+  their sharpness at twice the others', ~35 dB more of their energy above 6 kHz. Now LOFI's level is set by WAVE on the
+  voice's amplitude (BYTE and FLOAT −6 dB, PLS SAW NOIS −4.5, WRAM −3, TRI −1.5: user presets and every project too),
+  and a fixed one-pole (−3 dB at ~7.5 kHz) files the top of the chip waves and FLOAT, BYTE's own two smoothing poles
+  lowered from ~6.3 to ~4.9 kHz; the FILTER page's CUT keeps its scale. Factory presets' medians (C4 at 100, dry,
+  through the master): −12.4 → −14.7 LUFS (the melodic engines −12.3, ANALOG FM6 VOICE −13.2), 88.8 → 86.1 phon
+  (82.5), sharpness 1.58 → 1.44 acum (0.72); BYTEBEAT −11.6 → −15.0 LUFS, 92.0 → 88.4 phon (ANALOG's loudest 91.0);
+  FAT BASS → BYTEBEAT +1.8 LU / +5.8 phon → −2.7 LU / +1.2 phon. **Old projects with LOFI sound quieter and a little
+  softer** (raise the track's LEVEL if a mix needs it). LOFI's golden renders change (and the mixes with a LOFI part),
+  no other engine's; cost: BYTE −2 %, the chip waves and FLOAT +1.4–3 % (callgrind, 8 voices), the target's lofi_render
+  loop 253 → 260 (budget +10 %); flash +160 B.
+- **The web installer diagnoses itself** (many could not install). Every failure has its own message and a *What to
+  do* box, in **Spanish**, English and Japanese, and **COPY REPORT** copies what it saw (browser, MIDI ports and what
+  each answered, the FM-1's identity and firmware, the step, the error). Told apart now: no WebMIDI (iPhone/iPad,
+  Safari, an old Firefox), MIDI refused or blocked, a MIDI service that fails to start (asked again), **a port another
+  program holds** (Windows: the M-VAVE app, a DAW, MIDI-OX), a port that does not answer, no FM-1 at all, official
+  **V13/V14 and a future V16**, **Felucca** (FM-1_9XY, INFO 1.x), **Skiff** (FM-1_7XY: it was taken for an official
+  firmware and sent to V15 without its backup), other firmware, an FM-1 that never starts the update, the loader not
+  appearing, the wrong file for Return to official V15 (the ZIP, another version, a JIANT package), WL80UBOOT (a WebUSB
+  check). More robust: scans again with backoff, UPGRADE asked again when nothing was read, the loader waited 90 s
+  (was 30: a driver install on Windows), a fresh MIDIAccess while waiting, Windows port names paired (MIDIIN2 (FM-1)),
+  an FM-1 under an unknown name probed when alone, INFO and the backup's reads retried (a late reply skipped), the
+  backup's LIST given 8 s. **Return to official V15** saves Felucca's and Skiff's complete archives (samples, Skiff's
+  pattern bank: restorable with their own editors) and, when a firmware cannot make one or the backup fails, asks
+  before going on without it (no dead end). The editor lets the FM-1 go while the installer writes in another tab.
+  **404.html**: old and mistyped links (/JIANT/installer/, /JIANT/webapp/, a link with ":1:1" stuck) go to the page
+  they meant. The installer's flows moved to web/fm1diag.js; web/test_web.mjs runs each failure path against a
+  simulated FM-1 and the page in a fake DOM. Manual § 16: "The installer does not install".
+
+### v0.9.10
+- **VOICE draws its vocal tract alive** (the mock-up's variant C, "Tracto vivo"), in place of 0.9.4's CT head: framed
+  close (~80 × 62 units: the mouth and the neck; the crown off the panel), the head's outline a faint ghost and the
+  vocal tract a glowing tube of two walls from the lips over the palate and the velum down to the glottis, the trachea
+  under it. The tongue (its floor), the jaw, the lips and the place of each consonant shape it as before (it narrows and
+  heats where it closes); for m n ng the velum drops and a branch to the nose opens. Each glottal pulse is a bulge
+  travelling up the tube (up the nose for the nasals), the vocal folds open and shut as a V, sound waves leave the mouth
+  (the nose), and the head nods a little at each vowel's onset (WORDS off: each note) and sways and breathes slowly
+  with the level; still in silence, as before. **The jaw now opens downward** (0.9.4's turned it up: the chin rose on an
+  open vowel), its condyle gliding forward. UI only, nothing in the audio path (callgrind: song/cputest 3079, as
+  before). Draw (host, callgrind, vx_voice a frame over a sung phrase): the whole panel 668 k → 255 k instructions,
+  EDIT's left panel 598 k → 204 k, HOME's BEING 598 k → 236 k. The CT's tables, the scan line and the spine, brain and
+  turbinate code are gone; flash +816 B (image 562748 → 563564 B: the tube's resampling, pulses and waves), .data+.bss
+  and RAM code unchanged, the pool's spare 10816 → 10784 B (the nod, the pulses and the waves in vxs).
+- **LOFI becomes a chip** (the mock-up's V1 "DIP"): CHIP flattens the caterpillar into a DIP chip seen from above,
+  gliding there in ~0.6 s (8BIT / FULL the organism, 4BIT and STEP half way, 4B/2 nearly, 1BIT the chip: the legs its
+  pins, the rings the die's pads, the head folded into the notch, the wave as two traces on the die), and every other
+  knob deforms it in its own way (CRUSH a stutter, MASK torn bands, FEEDBK echoes, LOOP the tail curling, DIST spikes,
+  the filter's type its body, RES ringing contours...; see v0.9.6 below). UI only: the audio is bit for bit as before
+  (two read-only accessors in eng_lofi.c), cpu_vg song/cputest 3079; draw +5 % (+15–21 % with HP and RES at the top);
+  flash +5456 B.
+- **STEMS+IN (and STEMS) without the rhythmic glitch.** Over USB, STEMS+IN lost whole blocks of 32 frames in bursts, a
+  few times a second, in every channel at once (STEMS too, more rarely): the next USB packet was queued too late. A
+  10-channel packet is on the wire for ~0.65 ms of each 1 ms frame and the FM-1 looked for the moment it had gone only
+  every 0.5 ms; whenever that check drifted into the short gap before the host's next request, the request found nothing,
+  the FM-1's ring overflowed and blocks were dropped. The packet is now queued within 0.1 ms of the last one leaving
+  (checked on every 10 kHz tick; idle, the check is a few instructions, and nothing changes in the audio render). The
+  stereo modes were not affected. A take recorded before cannot be repaired: record it again. (tests/stems_usb_test.c
+  now models the bus time and the drift, and shows 0.9.9's timing losing up to half the frames in STEMS+IN.)
+- **MENU › SYSTEM › USB takes on the first try.** A mode change (CONSOLE, STEREO, STEMS, IN+OUT, STEMS+IN) dropped the
+  FM-1 off the bus for only ~25 ms, too short for some phones and hubs to see it go: they kept the old mode, and
+  STEMS took several switches to appear. It now stays off 0.5 s before attaching with the new descriptors (each mode
+  already has its own bcdDevice); the console off and the stems on in one change still drop it once.
+
+- Memory: image **568940 B** of 581564 (0.9.9: 563020; 12624 B free); .data + .bss **79556 B**, pool spare
+  **10784 B**, RAM code **22460 B**. cpu_vg song/cputest 3079 as 0.9.9; the golden renders unchanged; the TIMER5 tick
+  ~1 % longer while a USB audio packet is queued (within its budget).
+
 ### v0.9.9
 - **DRUM-X, VOICE and ANIMAL first: the tracks at power-on.** The FM-1 (and MENU › SYSTEM › INIT SYSTEM, SAVE › TOOLS
   › NEW PROJECT) starts with **T1 DRUM-X** (the factory kit), **T2 VOICE SINGER EN** (it sings English words),

@@ -17,6 +17,9 @@ code in SRAM with I-cache hits, published in Felucca discussion #283 (hugelton/F
   bundles  h # t     the slower half; a load in the tail 2, a store 1, a multiply in the head 2
   branches           not taken 1, taken 6 while warm, 9 cold: a loop whose iteration takes at most 3 distinct
                      targets stays warm, 4 -> two of them miss each iteration, 5 or more -> all miss
+  rep rN { body }    (JIANT's assumption, not measured in #283) a zero-overhead loop: REP_SETUP cycles to start,
+                     then the body back to back, no branch; the "if (rN != 0) goto" after it (an interrupted
+                     loop resumed, as the vendor's code has it) not taken
   fetch              after a taken branch fetch restarts at the target's 32-bit word: a 32/48-bit target at
                      2 mod 4 costs 1 more; runs of 48-bit instructions ~1.5 cycles each
   Benchmarks (#283): fm6_op_run's first loop (20 instructions) 40 cycles, upstream's dv_metal_run inner loop (26)
@@ -27,13 +30,16 @@ branches not taken but those around a divide, the back edge taken, a jump table'
 for finding hazards, not a cycle-exact simulator.
 
   python3 tests/pi32_cycles.py [DIS] FUNC...     the loops of FUNC: cycles an iteration, stalls by cause, hazards
+  PI32_TAKE=addr,.. PI32_FALL=addr,..          conditional branches (hex) taken / not taken on the path
 """
+import os
 import re
 import sys
 
 DIV_CYC = 16            # a divide: 10 + 3 x 2 (a dividend of 3 significant bytes, typical of the Q15 / Q16 audio values)
 TAKEN, COLD = 6, 9
 CALL_RET = TAKEN + TAKEN    # a call in a loop: there and back (the callee's own cycles are not counted here)
+REP_SETUP = 2           # a rep loop's start (not measured in #283: an assumption); its iterations cost no branch
 NEST = 4                # an inner loop runs NEST times a pass of the outer one (target_budget.py's weight)
 
 LABEL = re.compile(r"^([A-Za-z_.][A-Za-z_0-9.]*):$")
@@ -101,6 +107,10 @@ class Insn:
         elif re.match(r"ifs? \(.*\{$", t):      # a predicated block: the compare; its body follows as plain lines
             self.kind = "alu"
             self.src = regs(t)
+        elif re.match(r"rep \d+ r\d+ \{$", t):    # a zero-overhead loop: its body's bytes, the count register
+            self.kind = "rep"
+            self.src = self.dst = regs(t)
+            self.table = [addr + size + int(t.split()[1])]     # (the body's end)
         elif t.startswith(("tbb ", "tbh ")):     # a jump table: the path takes its first entry (parse())
             self.kind = "jt"
             self.src = regs(t)
@@ -232,6 +242,8 @@ def back_edges(insns):
         if i.kind != "br" or i.target is None or i.target >= i.addr or i.target not in at:
             continue
         t = at[i.target]
+        if body[t].kind == "rep" and body[t].table and i.addr == body[t].table[0]:
+            continue                # (if (rN != 0) goto rep: an interrupted rep resumed, not a loop)
         seen, todo = {t}, [t]       # a cycle inside the span: the branch reachable from its target through the
         while todo and k not in seen:   # code between them (not code two paths share, a block out of line)
             for y in succ[todo.pop()]:
@@ -253,7 +265,16 @@ def loops(insns):
     for i in insns:
         if i.addr in edges and lo <= i.target < i.addr:
             heads[i.target] = max(heads.get(i.target, i.addr), i.addr)
+        if i.kind == "rep":         # a rep body: a loop of its own, closed without a branch
+            last = [x.addr for x in insns if i.addr < x.addr < i.table[0]]
+            if last:
+                heads[i.addr + i.size] = max(last)
     return sorted(heads.items())
+
+
+# branch directions to follow instead of the walk's own (hex addresses, comma-separated): the path of a given case
+FORCE = {int(a, 16): tk for v, tk in (("PI32_TAKE", True), ("PI32_FALL", False))
+         for a in os.environ.get(v, "").split(",") if a}
 
 
 def path(insns, h, e, spans):
@@ -273,6 +294,12 @@ def path(insns, h, e, spans):
         for (h2, e2) in spans:      # an inner loop's head: noted (its back edge is not taken on this path)
             if h2 == i.addr and (h2, e2) != (h, e) and h < h2 <= e2 <= e and (h2, e2) not in inner:
                 inner.append((h2, e2))
+        if i.kind == "br" and i.target is not None and i.cond and i.addr in FORCE:
+            out.append((i, FORCE[i.addr]))      # (a direction given: PI32_TAKE / PI32_FALL)
+            k = idx.get(i.target) if FORCE[i.addr] else k + 1
+            if k is None:
+                return out, inner
+            continue
         if i.kind == "br" and i.target is not None:
             if i.target == h and (i.addr == e or not i.cond):
                 out.append((i, True))
@@ -385,6 +412,8 @@ class Sim:
                 o = 2.0 if n == 0 else 1.0
             elif k == "short":
                 self.put(x.dst, start + 2, "short")
+            elif k == "rep":
+                o = REP_SETUP
             elif k == "div":
                 o = DIV_CYC
                 self.put(x.dst, start + DIV_CYC, "div")
@@ -421,7 +450,11 @@ def estimate(insns, h, e, spans=None, cache=None):
         return cache[(h, e)]
     cache[(h, e)] = {"cyc": 0, "insns": 0, "ins_all": 0, "targets": set()}      # (a cycle in the spans)
     p, inner = path(insns, h, e, spans)
-    linear = not p or p[-1][0].target != h
+    rep = any(i.kind == "rep" and i.addr + i.size == h for i in insns)
+    if rep:                 # a rep body: each instruction once, no branch back (the hardware loops it)
+        p = [(i, False) for i in insns if h <= i.addr <= e and i.nst != -1]
+        inner = []
+    linear = not rep and (not p or p[-1][0].target != h)
     if linear:      # the walk left the loop (a return, a jump out): every instruction of the span once instead
         p = [(i, i.addr == e or (i.kind in ("br", "jt") and not i.cond)) for i in insns
              if h <= i.addr <= e and i.nst != -1]

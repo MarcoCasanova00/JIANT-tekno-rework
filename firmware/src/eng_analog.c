@@ -78,7 +78,7 @@ static __attribute__((noinline)) void analog_morph(track_t *t, voice_t *v, int32
         int32_t s = mulq15(an_morph(mpos, ph0, inc1), m1) + mulq15(an_morph(mpos, ph1, inc2), m2);
         ph0 += inc1;
         ph1 += inc2;
-        if (nz)
+        if (DSP_RARE(nz))                               /* (0.9.19: NOISE rare, out of the straight path) */
             s += mulq15((int32_t)(noise32(&nst) >> 17) - 16384, nz);
         if (drv)
             s = softclip(((s >> 2) * (drive >> 2)) >> 11);
@@ -145,7 +145,7 @@ static __attribute__((noinline)) void analog_ext(track_t *t, voice_t *v, int32_t
             ph1 = ((ph0 + inc1) >> 4) * r;              /* (the new cycle's fraction, at osc 2's rate) */
         ph0 += inc1;
         s = mulq15(a, m1) + mulq15(b, m2);
-        if (nz)
+        if (DSP_RARE(nz))                               /* (0.9.19: NOISE rare, out of the straight path) */
             s += mulq15((int32_t)(noise32(&nst) >> 17) - 16384, nz);
         if (drv)
             s = softclip(((s >> 2) * (drive >> 2)) >> 11);
@@ -178,7 +178,12 @@ static __attribute__((noinline)) void analog_render(track_t *t, voice_t *v, int3
     tsvf_coef(&flt, cut, p[P_E5]);
     for (i = 0; i < n; i++) {
         int32_t a, b, s;
-        switch (wave) {
+        if (!DSP_RARE(wave)) {                          /* (0.9.19) SAW, the usual WAVE, first: no jump table and no
+                                                         * jump back from it (two taken branches a sample, Felucca
+                                                         * discussion #283) */
+            a = osc_saw(ph0, inc1);
+            b = osc_saw(ph1, inc2);
+        } else switch (wave) {
         case 1:
             a = osc_pulse(ph0, inc1, 0x80000000u);
             b = osc_pulse(ph1, inc2, 0x80000000u);
@@ -203,14 +208,14 @@ static __attribute__((noinline)) void analog_render(track_t *t, voice_t *v, int3
         ph0 += inc1;
         ph1 += inc2;
         s = mulq15(a, m1) + mulq15(b, m2);
-        if (nz)
+        if (DSP_RARE(nz))                               /* (0.9.19: NOISE rare, out of the straight path) */
             s += mulq15((int32_t)(noise32(&nst) >> 17) - 16384, nz);
         if (drv)
             s = softclip(((s >> 2) * (drive >> 2)) >> 11);   /* pre-shifts: drive is up to 3x, no overflow */
         {   /* filter, linear up to half scale, then a soft knee (only resonance peaks saturate); soft_knee()
              * written out: the host compiler makes this loop 1 % slower with the call */
             int32_t y = tsvf_lp(&flt, s >> 1, &ic1, &ic2), a = y < 0 ? -y : y;
-            if (a > 16000) {
+            if (DSP_RARE(a > 16000)) {
                 a = 16000 + (softclip((a - 16000) * 2) >> 1);
                 y = y < 0 ? -a : a;
             }
