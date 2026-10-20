@@ -1,0 +1,55 @@
+name: Reporte de crash (español)
+description: "Una pantalla roja \"JIANT CRASH\", o el FM-1 se reinició solo"
+labels: [bug, crash]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias: cada registro de crash ayuda a encontrar la causa. Después del reinicio, entrá a **MENU > SYSTEM > ABOUT** y bajá hasta **LAST CRASH**: sacale una foto a esa línea y a las de abajo (desde 0.9.19: CRASHES, SP, EMU DBG, C2 PC, BUS, CLK BOOT, THE CRASH BEFORE). Si podés, también una foto de la pantalla roja (la 0.9.19 la deja 10 s).
+  - type: input
+    id: version
+    attributes:
+      label: "Versión de JIANT"
+      description: "MENU > SYSTEM > ABOUT (la primera línea). Decí si vino del instalador oficial o del beta (preview)."
+      placeholder: "v0.9.18, instalador oficial"
+    validations:
+      required: true
+  - type: input
+    id: cores
+    attributes:
+      label: "Ajuste de núcleos (MENU > SYSTEM > CPU CORES, y qué dice ABOUT ahora)"
+      placeholder: "2 CORES; ABOUT ahora dice CORES 1 (AFTER A CRASH)"
+    validations:
+      required: true
+  - type: input
+    id: clock
+    attributes:
+      label: "Reloj (MENU > SYSTEM > CPU CLOCK; ABOUT dice CPU 360 MHZ o CPU 320 MHZ)"
+      placeholder: "360 MHZ"
+    validations:
+      required: true
+  - type: textarea
+    id: lastcrash
+    attributes:
+      label: "La línea LAST CRASH (MENU > SYSTEM > ABOUT), escrita o en foto"
+      description: "Copiala tal cual, por ejemplo `PC01 2C 0.9.17 02820A80 02034402`, y las líneas de abajo; adjuntá también la foto de la pantalla (arrastrala acá)."
+      placeholder: "PC01 2C 0.9.17 02820A80 02034402"
+    validations:
+      required: true
+  - type: textarea
+    id: redscreen
+    attributes:
+      label: "La pantalla roja (si la viste)"
+      description: "Una foto, o las líneas escritas (CORE x OF y, CODE, VEC, PC, EMU, DBG, RETS, SP, C2)."
+  - type: textarea
+    id: doing
+    attributes:
+      label: "Qué estabas haciendo"
+      description: "En play o parado, qué página, qué motores en qué pistas, si girabas una perilla o grababas, si había USB audio o MIDI conectado, cuánto hacía que estaba prendido, el ajuste de LOAD. ¿Se repite de la misma forma?"
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: "El proyecto, si se puede"
+      description: "Un backup del editor web (BACKUP) o el nombre del proyecto / de qué está hecho. Adjuntá el .json."

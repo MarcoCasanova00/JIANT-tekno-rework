@@ -160,6 +160,10 @@ int main(int argc, char **argv)
             ui_prefs &= ~PREF_ACCEL_OFF;
         }
     }
+    if (out_seen) {
+        printf("fuzz_ui: %u parameter values outside their ranges (above)\n", out_seen);
+        return 1;
+    }
     printf("fuzz_ui ok: %u frames, %u audio blocks, %u key presses, %u MIDI messages\n", frames_n, blocks, notes, midi);
     return 0;
 }

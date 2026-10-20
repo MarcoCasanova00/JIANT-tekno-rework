@@ -1,0 +1,49 @@
+name: Reporte de error (español)
+description: "Algo en JIANT no funciona como debería (un error por reporte). Una pantalla roja \"JIANT CRASH\" o un reinicio solo: usá \"Reporte de crash\"."
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Un error por reporte. Las ideas también son bienvenidas: abrí un issue en blanco con "idea" en el título. Esto es JIANT (basado en Felucca): reportalo acá, no a Felucca.
+  - type: input
+    id: version
+    attributes:
+      label: "Versión de JIANT"
+      description: "MENU > SYSTEM > ABOUT (la primera línea), o la pantalla al prender"
+      placeholder: "v0.9.18"
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: "Núcleos y reloj"
+      description: "MENU > SYSTEM > ABOUT dice \"CORES 2\" o \"CORES 1 (...)\" y \"CPU 360 MHZ\" o \"CPU 320 MHZ\""
+      placeholder: "CORES 2, CPU 360 MHZ"
+  - type: input
+    id: system
+    attributes:
+      label: "Computadora, sistema y navegador (si el editor, el instalador o el USB tienen que ver)"
+      placeholder: "Windows 11, Chrome 140"
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Pasos para reproducirlo"
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Qué esperabas"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Qué pasó"
+      description: "Una foto o un video corto ayuda. Un backup del proyecto (BACKUP en el editor web) si el error está en una canción."
+    validations:
+      required: true

@@ -888,7 +888,12 @@ default, 1 "320 MHZ", SYSTEM): both from the device's next start; the device set
 with both cores at work (`src/cpu_safe.c`). The last crash travels in the settings record (the full backup's settings
 item, `persist_t`): `favorites.factory[13]`, 32 ASCII bytes as MENU > ABOUT > LAST CRASH shows them, e.g.
 `IL01 2C 0.9.12 0201ABCD 02012345` (code and vector, cores, version, PC, RETS; MANUAL › Troubleshooting); any other
-content there is no record.
+content there is no record. (0.9.19) Three more retired rows hold the rest (`src/cpu_safe.c`): `factory[8]` (GRAIN's)
+"JD", the count (u16), the core, flags, stage, page, SP, EMU, DBG, ms since power-on, two ETM PCs; `factory[6]`
+(TRIO's) "JE", the boot clock's code, PLL2's multiplier - 200, the second core's PC, the five bus IDs, the three
+write-limit numbers; `factory[9]` (PHYS's) the crash before, as the line. `tools/crash_decode.py --backup` reads a
+backup's settings object. CPU CLOCK's default is 320 MHZ since 0.9.19 (bit 7 of the CPU byte, CPU_V2, marks a record
+migrated once; the editor's id 24 values are unchanged).
 
 (JIANT 0.9.12) The tabs are five: 0 DISPLAY, 1 CONTROL, 2 AUDIO, **3 MIDI**, **4 SYSTEM** (SYSTEM was 3). MIDI OUT (id 20)
 moved to MIDI; its id and values are unchanged. MIDI also holds LEARN (arms MIDI LEARN on the device; not a setting) and

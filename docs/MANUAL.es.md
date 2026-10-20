@@ -2271,7 +2271,7 @@ configuración guardada ni para el editor.)
 | | 4 | CALIBRATION | una acción: OCT+ abre HARDWARE CALIBRATION (enseñale cada botón y perilla) |
 | SYSTEM › SYSTEM | 1 | RESTORE LAST | **OFF** (por defecto: sin autoguardado, encendido de cero), ON (la última sesión vuelve al encender) |
 | | 2 | CPU CORES | 1 CORE, **2 CORES** (por defecto) — desde el próximo arranque (ver [Problemas](#16-problemas-y-preguntas-frecuentes)); era CPU |
-| | 3 | CPU CLOCK | **360 MHZ** (por defecto), 320 MHZ — desde el próximo arranque (ver [Problemas](#16-problemas-y-preguntas-frecuentes)) |
+| | 3 | CPU CLOCK | **320 MHZ** (por defecto desde 0.9.19; era 360), 360 MHZ — desde el próximo arranque (ver [Problemas](#16-problemas-y-preguntas-frecuentes)) |
 | | 4 | ABOUT | una acción: OCT+ abre versión, código QR, AUDIO LOAD (NOW, PEAK, LATE, SHED desde el encendido), CPU TEST y créditos (SELECT desplaza, OCT− vuelve); ahí OCT+ abre PROFILE |
 
 INIT SYSTEM (en el MENU hasta la 0.9.17) es **SAVE › TOOLS › NEW PROJECT**: el mismo diálogo, el mismo UNDO.
@@ -2578,19 +2578,26 @@ decinos la versión (MENU › SYSTEM › ABOUT). Cómo leerla:
   **PC** un salto fuera del código, **WR** una escritura en una zona protegida, **MM** la unidad de memoria, **BU** un
   acceso a memoria que no existe (un puntero malo), **WD** un cuelgue (lo reinició el watchdog: sin pantalla roja),
   **??** ninguna de esas.
-- El FM-1 se reinicia solo a los 4 s. El último crash queda guardado en los ajustes, aunque lo apagues: **MENU ›
-  SYSTEM › ABOUT › LAST CRASH** lo muestra en una línea (`IL01 2C 0.9.12 0201ABCD 0201ABCD`: código y vector, núcleos,
-  versión, PC, RETS). El backup de ajustes del editor también lo lleva.
-- Para desarrolladores: `tools/crash_decode.py VEC PC EMU DBG RETS` dice la función, con el ELF de la versión que
-  falló.
+- El FM-1 se reinicia solo (a los 10 s desde 0.9.19, 4 s antes; la 0.9.19 muestra además **SP** y **C2**, dónde
+  estaba el segundo núcleo). El último crash queda guardado en los ajustes, aunque lo apagues: **MENU › SYSTEM ›
+  ABOUT › LAST CRASH** lo muestra en una línea (`PC01 2C 0.9.17 02820A80 02034402`: código y vector, núcleos, versión,
+  PC, RETS). Desde 0.9.19 las líneas de abajo dicen más: **CRASHES** (cuántos desde que se hicieron los ajustes, el
+  núcleo, los segundos desde que prendió), **SP** (la pila, y **AT AUDIO** o **UI** etapa.página: dónde estaba el
+  firmware), **EMU DBG**, **C2 PC** (el segundo núcleo), **BUS** (quién hizo el acceso malo), **CLK BOOT** (el reloj
+  del arranque) y **THE CRASH BEFORE** (el anterior). El backup de ajustes del editor lleva todo eso.
+- **Para reportarlo:** sacale una foto a esa parte de ABOUT (y a la pantalla roja si podés) y abrí un *Reporte de
+  crash* en <https://github.com/juanjiant-bit/JIANT/issues>, con la versión, CPU CORES, CPU CLOCK y qué estabas haciendo.
+- Para desarrolladores: `tools/crash_decode.py --line "PC01 2C 0.9.17 02820A80 02034402" --about "SP ..." ...` (o los
+  cinco números de la pantalla roja, o `--backup backup.json`) dice las funciones, con el ELF de la versión que falló
+  (`--builds DIR` lo elige por versión).
 
 **Qué probar si se cuelga de vez en cuando (aunque no hagas nada).** En este orden, unas horas cada cosa:
 1. **MENU › SYSTEM › CPU CORES 1 CORE** (la 0.9.12 lo hace sola después del primer crash con dos núcleos; antes de la
    0.9.12, mantené REC en cada encendido).
-2. **MENU › SYSTEM › CPU CLOCK 320 MHZ**: el chip al reloj que JieLi garantiza en vez de los 360 MHz que pone el
-   arranque del FM-1 (se aplica en el próximo encendido; ABOUT dice **CPU 320 MHZ**). Es ~11 % menos de CPU: una
-   canción pesada puede soltar voces antes (LOAD LITE ayuda). Si el FM-1 no puede (su reloj está configurado de otra
-   forma), ABOUT sigue diciendo **CPU 360 MHZ**.
+2. **MENU › SYSTEM › CPU CLOCK 320 MHZ** (por defecto desde 0.9.19; fijate que ABOUT diga **CPU 320 MHZ**): el chip al
+   reloj que JieLi garantiza en vez de los 360 MHz que pone el arranque del FM-1, como lo corre el firmware abierto de
+   M-VAVE. Es ~11 % menos de CPU: una canción pesada puede soltar voces antes (LOAD LITE ayuda). Si el FM-1 no puede
+   (su reloj está configurado de otra forma), ABOUT sigue diciendo **CPU 360 MHZ**. Poné **360 MHZ** solo para comparar.
 3. Si sigue colgándose: la foto, la versión y LAST CRASH, por favor.
 
 **Clicks, cortes, el medidor de carga lleno.** Dejá TRACKS en 4, probá **LOAD LITE** o **ECO**, usá menos voces (MONO,

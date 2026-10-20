@@ -161,21 +161,6 @@ void fm1_fault_c(uint32_t *f)
     fm1_irq_off();
     if (in_fault++)                           /* fault while reporting: reset at once */
         *(volatile uint32_t *)0x10000u |= 1u << 4;
-    fm1_crash.other = fm1_crash.other_pc = 0;
-#if FELUCCA_DUAL_CORE
-    if (fm1_other_live) {                     /* (0.9.19) the other core stopped first, where it is noted (the SDK's
-                                               * order: pause, hold, then its PC) */
-        uint32_t o = fm1_cnum() ^ 1u, t0 = *(volatile uint32_t *)0x10804u;
-        FM1_CMD_PAUSE(o) = 0xFFFFFFFFu;
-        while (*(volatile uint32_t *)0x10804u - t0 < 240u)   /* (10 us: it stops) */
-            ;
-        if (o)
-            fm1_core1_stop();
-        fm1_other_live = 0;
-        fm1_crash.other_pc = FM1_PCRS(o);
-        fm1_crash.other = 1;
-    }
-#endif
     fm1_crash.magic = FM1_CRASH_MAGIC;
     fm1_crash.count = count + 1u;
     fm1_crash.vec = (f[19] - (uint32_t)(uintptr_t)fm1_fatal_stubs) / 6u - 1u;
@@ -196,6 +181,24 @@ void fm1_fault_c(uint32_t *f)
     for (i = 0; i < 8u; i++)
         fm1_crash.bus[i] = FM1_DBG_ID(i);
     fm1_crash.app = 0;
+    fm1_crash.other = fm1_crash.other_pc = 0;
+#if FELUCCA_DUAL_CORE
+    if (fm1_other_live) {                     /* (0.9.19) the other core stopped and where it is noted (the SDK's
+                                               * order: pause, hold, then its PC), after the record is whole: CMD_PAUSE
+                                               * and PCRS are the SDK's registers as read from its handler; were one
+                                               * wrong, the fault in here resets at once (in_fault) and the next boot
+                                               * still logs the crash */
+        uint32_t o = fm1_cnum() ^ 1u, t0 = *(volatile uint32_t *)0x10804u;
+        FM1_CMD_PAUSE(o) = 0xFFFFFFFFu;
+        while (*(volatile uint32_t *)0x10804u - t0 < 240u)   /* (10 us: it stops) */
+            ;
+        if (o)
+            fm1_core1_stop();
+        fm1_other_live = 0;
+        fm1_crash.other_pc = FM1_PCRS(o);
+        fm1_crash.other = 1;
+    }
+#endif
     fm1_fault(&fm1_crash);
     for (;;)
         ;

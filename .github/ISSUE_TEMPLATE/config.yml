@@ -2,4 +2,7 @@ blank_issues_enabled: true
 contact_links:
   - name: JIANT manual
     url: https://github.com/juanjiant-bit/JIANT/blob/main/docs/MANUAL.md
-    about: How JIANT works, page by page (español en docs/MANUAL.es.md).
+    about: "How JIANT works, page by page (español en docs/MANUAL.es.md)."
+  - name: Troubleshooting / Problemas
+    url: https://github.com/juanjiant-bit/JIANT/blob/main/docs/MANUAL.md#16-troubleshooting-and-faq
+    about: "Crashes, the installer, clicks, USB (español en docs/MANUAL.es.md, sección 16)."

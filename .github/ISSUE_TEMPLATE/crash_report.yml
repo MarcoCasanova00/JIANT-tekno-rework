@@ -1,0 +1,55 @@
+name: Crash report
+description: "A red \"JIANT CRASH\" screen, or the FM-1 restarted by itself"
+labels: [bug, crash]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks: every crash record helps find the cause. After the restart, open **MENU > SYSTEM > ABOUT** and scroll down to **LAST CRASH**: photograph that line and the lines under it (0.9.19 on: CRASHES, SP, EMU DBG, C2 PC, BUS, CLK BOOT, THE CRASH BEFORE). Photograph the red screen too if you can (0.9.19 keeps it 10 s). En español: "Reporte de crash".
+  - type: input
+    id: version
+    attributes:
+      label: "JIANT version"
+      description: "MENU > SYSTEM > ABOUT (the first line). Say if it came from the official installer or the beta (preview)."
+      placeholder: "v0.9.18, official installer"
+    validations:
+      required: true
+  - type: input
+    id: cores
+    attributes:
+      label: "Cores setting (MENU > SYSTEM > CPU CORES, and what ABOUT says now)"
+      placeholder: "2 CORES; ABOUT now says CORES 1 (AFTER A CRASH)"
+    validations:
+      required: true
+  - type: input
+    id: clock
+    attributes:
+      label: "CPU clock (MENU > SYSTEM > CPU CLOCK; ABOUT says CPU 360 MHZ or CPU 320 MHZ)"
+      placeholder: "360 MHZ"
+    validations:
+      required: true
+  - type: textarea
+    id: lastcrash
+    attributes:
+      label: "The LAST CRASH line (MENU > SYSTEM > ABOUT), typed or as a photo"
+      description: "Type it exactly as shown, e.g. `PC01 2C 0.9.17 02820A80 02034402`, and the lines under it; attach the photo of the screen too (drag it in)."
+      placeholder: "PC01 2C 0.9.17 02820A80 02034402"
+    validations:
+      required: true
+  - type: textarea
+    id: redscreen
+    attributes:
+      label: "The red screen (if you saw it)"
+      description: "A photo, or the lines typed (CORE x OF y, CODE, VEC, PC, EMU, DBG, RETS, SP, C2)."
+  - type: textarea
+    id: doing
+    attributes:
+      label: "What you were doing"
+      description: "Playing or stopped, which page, which engines on which tracks, turning a knob, recording, USB audio or MIDI connected, how long since power-on, LOAD setting. Does it happen again in the same way?"
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: "The project, if possible"
+      description: "A backup from the web editor (BACKUP) or the project name / what it is made of. Attach the .json."

@@ -1,28 +1,34 @@
 name: Bug report
-description: Something in JIANT doesn't work as it should (one bug per issue)
+description: "Something in JIANT doesn't work as it should (one bug per issue). A red \"JIANT CRASH\" screen or a restart: use \"Crash report\"."
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        One bug per issue. Ideas are welcome too: open a blank issue with "idea" in the title. This is JIANT (based on Felucca): report here, not to Felucca.
+        One bug per issue. Ideas are welcome too: open a blank issue with "idea" in the title. This is JIANT (based on Felucca): report here, not to Felucca. En español: "Reporte de error".
   - type: input
     id: version
     attributes:
-      label: JIANT version
-      description: Hold HOME > ABOUT on the FM-1
-      placeholder: "v0.6.84"
+      label: "JIANT version"
+      description: "MENU > SYSTEM > ABOUT (the first line), or the splash at power-on"
+      placeholder: "v0.9.18"
     validations:
       required: true
   - type: input
+    id: cpu
+    attributes:
+      label: "Cores and clock"
+      description: "MENU > SYSTEM > ABOUT shows \"CORES 2\" or \"CORES 1 (...)\" and \"CPU 360 MHZ\" or \"CPU 320 MHZ\""
+      placeholder: "CORES 2, CPU 360 MHZ"
+  - type: input
     id: system
     attributes:
-      label: Computer, OS and browser (if the editor, installer or USB is involved)
+      label: "Computer, OS and browser (if the editor, installer or USB is involved)"
       placeholder: "macOS 15.6, Chrome 140"
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: "Steps to reproduce"
       placeholder: |
         1. ...
         2. ...
@@ -31,13 +37,13 @@ body:
   - type: textarea
     id: expected
     attributes:
-      label: What you expected
+      label: "What you expected"
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: What happened
-      description: A photo or short video helps.
+      label: "What happened"
+      description: "A photo or short video helps. A project backup (the web editor's BACKUP) if the bug is in a song."
     validations:
       required: true

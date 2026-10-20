@@ -280,7 +280,9 @@ static __attribute__((noinline)) void live_frame(void)
 static __attribute__((noinline)) void live_knob(uint32_t slot, int32_t steps)
 {
     int mano = lv_isman();
-    uint32_t tg = lv_tracks(), f = (uint32_t)__builtin_ctz(tg), i;
+    uint32_t tg = lv_tracks(), f = tg ? (uint32_t)__builtin_ctz(tg) : 0u, i;   /* (0.9.19: no track picked (PISTAS
+                                                         * SYN / DRM with none of that kind): ctz(0) is 32 on the
+                                                         * pi32v2, a read past lv's rows; tests/fuzz_ui.c) */
     int32_t d = clamp(steps, -12, 12), v;
     if (mano && slot == 3u) {                           /* the DJ FILTER, as MIXER's KNOB 4 */
         tracks_edit(3, steps);
@@ -313,7 +315,7 @@ static void lv_card(uint32_t c, const char *l, const char *v, const char *u, int
 static __attribute__((noinline)) void live_cards(void)
 {
     int mano = lv_isman();
-    uint32_t tg = lv_tracks(), f = (uint32_t)__builtin_ctz(tg), c = 0, ci = lv.cut[f] % LV_NCUT;
+    uint32_t tg = lv_tracks(), f = tg ? (uint32_t)__builtin_ctz(tg) : 0u, c = 0, ci = lv.cut[f] % LV_NCUT;
     int32_t r = lv.rate[f], dn = lv.dn[f];
     char val[8];
     const char *u = "";

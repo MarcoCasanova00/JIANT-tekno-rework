@@ -2134,7 +2134,7 @@ every setting, its values and its meaning: nothing changes in the saved settings
 | | 4 | CALIBRATION | an action: OCT+ opens HARDWARE CALIBRATION (teach each button and knob) |
 | SYSTEM › SYSTEM | 1 | RESTORE LAST | **OFF** (default: no autosave, power-on at zero), ON (the last session back at power-on) |
 | | 2 | CPU CORES | 1 CORE, **2 CORES** (default) — from the next start (see [Troubleshooting](#16-troubleshooting-and-faq)); was CPU |
-| | 3 | CPU CLOCK | **360 MHZ** (default), 320 MHZ — from the next start (see [Troubleshooting](#16-troubleshooting-and-faq)) |
+| | 3 | CPU CLOCK | **320 MHZ** (default since 0.9.19; was 360), 360 MHZ — from the next start (see [Troubleshooting](#16-troubleshooting-and-faq)) |
 | | 4 | ABOUT | an action: OCT+ opens version, QR code, AUDIO LOAD (NOW, PEAK, LATE, SHED since power-on), CPU TEST, and credits (scroll with SELECT, OCT− back); there OCT+ opens PROFILE |
 
 INIT SYSTEM (until 0.9.17 in the MENU) is **SAVE › TOOLS › NEW PROJECT**: the same dialog, the same UNDO.
@@ -2385,18 +2385,26 @@ tell us the version (MENU › SYSTEM › ABOUT). How to read it:
 - The code: **IL** illegal instruction, **MA** misaligned access, **DZ** divide by zero, **ST** stack overflow, **PC**
   a jump outside the code, **WR** a write into a protected area, **MM** the memory unit, **BU** an access to no memory
   (a bad pointer), **WD** a hang (the watchdog reset it: no red screen), **??** none of those.
-- The FM-1 restarts by itself after 4 s. The last crash stays in the settings, also after switching off: **MENU >
-  ABOUT > LAST CRASH** shows it as one line (`IL01 2C 0.9.12 0201ABCD 0201ABCD`: code and vector, cores, version, PC,
-  RETS). The editor's settings backup carries it too.
-- For developers: `tools/crash_decode.py VEC PC EMU DBG RETS` names the function, against the ELF of the version that
-  crashed.
+- The FM-1 restarts by itself (after 10 s since 0.9.19, 4 s before; 0.9.19 also shows **SP** and **C2**, the second
+  core's place). The last crash stays in the settings, also after switching off: **MENU > SYSTEM > ABOUT > LAST
+  CRASH** shows it as one line (`PC01 2C 0.9.17 02820A80 02034402`: code and vector, cores, version, PC, RETS). Since
+  0.9.19 the lines under it say more: **CRASHES** (how many since the settings were made, the core, the seconds since
+  power-on), **SP** (the stack, and **AT AUDIO** or **UI** stage.page: where the firmware was), **EMU DBG**, **C2 PC**
+  (the second core), **BUS** (the bus master of a bad access), **CLK BOOT** (the boot stage's clock) and **THE CRASH
+  BEFORE**. The editor's settings backup carries all of it.
+- **Reporting it:** photograph that part of ABOUT (and the red screen if you can) and open a *Crash report* at
+  <https://github.com/juanjiant-bit/JIANT/issues>, with the version, CPU CORES, CPU CLOCK and what you were doing.
+- For developers: `tools/crash_decode.py --line "PC01 2C 0.9.17 02820A80 02034402" --about "SP ..." ...` (or the five
+  numbers of the red screen, or `--backup backup.json`) names the functions, against the ELF of the version that
+  crashed (`--builds DIR` picks it by version).
 
 **What to try when it crashes now and then (even idle).** In this order, a few hours each:
 1. **MENU › SYSTEM › CPU CORES 1 CORE** (0.9.12 does it by itself after the first crash with both cores; before 0.9.12,
    hold REC at every power-on).
-2. **MENU › SYSTEM › CPU CLOCK 320 MHZ**: the chip at JieLi's rated clock instead of the 360 MHz the FM-1's boot
-   sets (switched at the next power-on; ABOUT shows **CPU 320 MHZ**). About 11 % less CPU: a heavy song may shed
-   voices sooner (LOAD LITE helps). If the FM-1 refuses (its clock is set up differently), ABOUT keeps **CPU 360 MHZ**.
+2. **MENU › SYSTEM › CPU CLOCK 320 MHZ** (the default since 0.9.19; check ABOUT says **CPU 320 MHZ**): the chip at
+   JieLi's rated clock instead of the 360 MHz the FM-1's boot sets, as M-VAVE's own open firmware runs it. About 11 %
+   less CPU: a heavy song may shed voices sooner (LOAD LITE helps). If the FM-1 refuses (its clock is set up
+   differently), ABOUT keeps **CPU 360 MHZ**. Set **360 MHZ** back only to compare.
 3. If it still crashes: the photo, the version and LAST CRASH, please.
 
 **Clicks, stutters, the load meter full.** Keep TRACKS on 4, try **LOAD LITE** or **ECO**, use fewer voices (MONO,
