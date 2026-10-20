@@ -745,6 +745,15 @@ int main(void)
                    d2 / 100u, d2 % 100u, d3 / 100u, d3 % 100u);
             bad += gcheck("  (0.9.14) the device factor: x1.60 without a CPU TEST, lighter pieces, still two melodic parts and sound",
                           d0 == 160u && d1 == 100u && d2 == 200u && d3 == 100u && est[1] < est[0] * 3u / 4u && !mel_bad && !quiet2);
+            {   /* (0.9.19) a CPU TEST measured with the voice budget by weight (CPT_W): the song keeps more voices, the
+                 * host holds it at 72 % (two cores) / 89 % (one): the same device factor as 0.9.18's 63 % / 77 % */
+                uint32_t w2, w1, o1;
+                cpt_cores = 2u | CPT_W; cpt_res = 72; w2 = gc_dev(); cpt_res = 144; d2 = gc_dev();
+                cpt_cores = 1u | CPT_W; cpt_res = 89; w1 = gc_dev();
+                cpt_cores = 1u; cpt_res = 77; o1 = gc_dev();
+                bad += gcheck("  (0.9.19) CPU TEST measured by weight: 72 % (2 cores) and 89 % (1) x1.00, 144 % x2.00; 0.9.18's 77 % (1) "
+                              "x1.00", w2 == 100u && d2 == 200u && w1 == 100u && o1 == 100u);
+            }
             cpt_res = 63; cpt_cores = 2;
         }
         gt_cpt = 0; cpt_res = 0; cpt_cores = 0;

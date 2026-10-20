@@ -2006,13 +2006,17 @@ static const uint8_t GC_DIVQ[6] = {1, 2, 4, 8, 3, 6};   /* a DIV's steps a beat,
 /* (0.9.14) the FM-1 against the model: the model is the host's instruction counts, and the device is heavier than they
  * say (its code runs from the flash through a small cache the two cores share: the more engines and effects a piece
  * plays, the more of it misses). Measured: SAVE > TOOLS 6 CPU TEST played (ui_menu.c cpt_res: its load, the host
- * holding it at 63 % with two cores, 77 % with one); not measured, GC_DEV_X100. On 0.9.13 an owner's FM-1 played EXPLORE
+ * holding it at 63 % with two cores, 77 % with one; 0.9.19: 72 / 89, gc_dev); not measured, GC_DEV_X100. On 0.9.13 an owner's FM-1 played EXPLORE
  * at ~90 % where the model said ~62 %: x1.45; x1.6 to be safe. Never under x1.0 (0.9.13's budget), x3 at most. To
  * recalibrate from a PROFILE photo: GC_DEV_X100 = the device's WHOLE HALF (AVG, playing) over the host's for the song */
 #define GC_DEV_X100 160u
 static uint32_t gc_dev(void)
 {
-    uint32_t d = cpt_res ? (uint32_t)cpt_res * 100u / (cpt_cores == 1u ? 77u : 63u) : GC_DEV_X100;
+    /* (0.9.19) CPU TEST keeps more voices now (the budget by weight, voice.c VOICE_W): the host holds it at 72 % with two
+     * cores (+14 %, callgrind over 10 s), 89 % with one (+15 %). A measure taken on 0.9.19 says so (CPT_W in cpt_cores);
+     * one of 0.9.14 .. 0.9.18's (fewer voices on both sides) against the old figures */
+    uint32_t one = (cpt_cores & CPT_CORES) == 1u, w = (cpt_cores & CPT_W) != 0u;
+    uint32_t d = cpt_res ? (uint32_t)cpt_res * 100u / (w ? (one ? 89u : 72u) : (one ? 77u : 63u)) : GC_DEV_X100;
     return d < 100u ? 100u : d > 300u ? 300u : d;
 }
 static uint32_t gc_budget(void)                          /* (65 / 63, 55 / 77, over the device; less 0.10; one core 0.12:

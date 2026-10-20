@@ -121,6 +121,9 @@ static int32_t menu_text(const char *s, int32_t y, uint16_t col, int draw)
  * (gen.c gc_dev: the host's model holds the song at ~63 % of a half with two cores, ~77 % with one) */
 #define cpt_res (favorites.factory[15][16])              /* (bytes no engine uses: engine 15) */
 #define cpt_cores (favorites.factory[15][15])
+#define CPT_CORES 0x0Fu                                  /* cpt_cores: the cores it ran on (1, 2) .. */
+#define CPT_W 0x10u                                      /* .. (0.9.19) measured with the voice budget by weight (gen.c gc_dev:
+                                                         * the song keeps more voices; 0.9.18 and before never set it) */
 #define cpt_arm (prf.cpt_arm)                            /* the CPU TEST song built, TRACKS 6 (song_dice.c cpu_test_song) */
 static __attribute__((noinline)) void cpt_poll(void)    /* (ui_input: every pass) */
 {
@@ -136,7 +139,7 @@ static __attribute__((noinline)) void cpt_poll(void)    /* (ui_input: every pass
     }
     if (prf.cpt_ms && t > 12000u && prf.cpt_n) {       /* stopped after 10 s of it: kept */
         cpt_res = (uint8_t)clamp((int32_t)(prf.cpt_sum / prf.cpt_n * 100u >> 8), 1, 250);
-        cpt_cores = (uint8_t)(mc_two() ? 2u : 1u);
+        cpt_cores = (uint8_t)((mc_two() ? 2u : 1u) | CPT_W);
         settings_save();
     }
     cpt_arm = (uint8_t)!prf.cpt_ms;                      /* (played and stopped: done either way) */
@@ -147,7 +150,7 @@ static void cpt_line(char *b)                            /* "CPU TEST 98 % (2 CO
     str_cpy(b, cpt_res ? "CPU TEST " : "CPU TEST: SAVE > TOOLS 6", 40);
     if (cpt_res) {
         fmt_int(b + 9, cpt_res);
-        str_cpy(b + str_len(b), cpt_cores == 1u ? " % (1 CORE)" : " % (2 CORES)", 14);
+        str_cpy(b + str_len(b), (cpt_cores & CPT_CORES) == 1u ? " % (1 CORE)" : " % (2 CORES)", 14);
     }
 }
 

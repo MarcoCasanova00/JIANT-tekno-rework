@@ -693,7 +693,7 @@ JIANT's modifications are distributed under the same license.
 
 Every update is listed here, newest first. (Since 0.6.80 at the end of the page: what the synth does comes first.)
 
-### v0.9.19 (in progress)
+### v0.9.19
 - **Voices that last: the budget counts what they cost, the governor gives them back.** "The system runs out of voices
   quite fast": measured on the host (`tests/voice_load_test.c`: 16 songs played 24 s on two cores, the power-on parts,
   a pad's long release, arpeggiated chords, ratchets, PLAYHEADS, a UNISON lead, GEN HOUSE TECHNO TRANCE DNB AMBIENT JAZZ
@@ -720,6 +720,10 @@ Every update is listed here, newest first. (Since 0.6.80 at the end of the page:
   voices cost more (mix/v12 3925 → 4100, the CPU TEST song over 10 s 3520 → 4028 with ~15 voices instead of ~12); the
   governor still answers past 75 % and the guard at 80 % as before. Target: the audio ISR's loops 270 → 93 (the guard's
   search out of line). Flash +1.3 KB.
+- **EXPLORE's CPU budget recalibrated for it.** CPU TEST now keeps more voices, so the host holds it at **72 %** of a
+  half with two cores (63 % before) and **89 %** with one (77 %): a CPU TEST measured on 0.9.19 (marked so in the
+  settings) is read against those, one measured before against the old figures, so EXPLORE is not ~14 % too careful.
+- Not touched: the overload guard (80 %, two halves in a row), the two-core watchdog and the fall back to one core.
 
 ### v0.9.18
 RATCH and ARP over the steps, the components regrouped, rolls that stay where they belong, COMP showing its step, and
