@@ -1211,7 +1211,7 @@ static void check_theme(void)
                 trk[0].p[P_E1] = (int16_t)((k / CTL) % 128u);   /* a value a block: swept back and forth */
             engine_block(&trk[0]);
             dips += trk[0].xf_dip;
-            vrender(i ? b + k : a + k, CTL);
+            vrender(i ? b + k : a + k, FS - k < CTL ? FS - k : CTL);
         }
     }
     for (k = 0; k < FS; k++)
@@ -1251,6 +1251,71 @@ static void check_theme(void)
     }
 }
 
+/* The original POS walk is the reference, including its 64-word limit. Check every knob position and the phoneme
+ * cache as well as the singer: a faster jump must leave the next syllable and generated phrase unchanged. */
+static void seek_reference(const track_t *t, sing_t *s, uint32_t lang, uint32_t lyr, uint32_t k)
+{
+    uint32_t w;
+    sy_reset(s);
+    for (w = 0; w < 64u && k; w++) {
+        if (s->wsy >= s->wns && !sy_word_next(t, s, lang, lyr)) return;
+        {
+            uint32_t d = (uint32_t)(s->wns - s->wsy) < k ? (uint32_t)(s->wns - s->wsy) : k;
+            s->wsy = (uint8_t)(s->wsy + d);
+            k -= d;
+            s->nsy = (uint16_t)(s->nsy + d);
+        }
+    }
+}
+static void check_seek_cycles(void)
+{
+    static const char *const TEXT[] = {
+        "love me now we go home", "uno dos tres cuatro", "a", "-", "- a -", "a - - b",
+        "strength through the night", "... ???", "_ _ x _", "konnichiwa sekai", "", "a - a - a - a",
+        "a b c d e f g h i j k l m n o p q r s t u v w x y z a b c d e f"};
+    uint32_t ti, lang, tx, pos, lyr, errors = 0, count = 0;
+    sing_init();
+    host_tracks_init();
+    for (ti = 0; ti < NTRK; ti++) {
+        track_t *t = &trk[ti];
+        host_preset(t, eng_voice(), 0);
+        for (lang = LG_ES; lang <= LG_JA; lang++)
+            for (tx = 0; tx < NELEM(TEXT); tx++) {
+                lyr_set(ti, TEXT[tx]);
+                for (pos = 0; pos < 127u; pos++) {
+                    sing_t a, b;
+                    sw_t wa, wb;
+                    memset(&a, 0, sizeof a);
+                    a.rng = 17u + ti; a.phr = 9; a.prem = 3; a.wsy = a.wns = 2;
+                    b = a;
+                    memset(&sing_w[ti], 0, sizeof sing_w[ti]);
+                    seek_reference(t, &a, lang, 0, pos); wa = sing_w[ti];
+                    memset(&sing_w[ti], 0, sizeof sing_w[ti]);
+                    sy_seek(t, &b, lang, 0, pos); wb = sing_w[ti];
+                    errors += memcmp(&a, &b, sizeof a) != 0 || memcmp(&wa, &wb, sizeof wa) != 0;
+                    count++;
+                }
+            }
+    }
+    /* Generated lyrics, including empty TEXT's generated fallback, retain the original walk. */
+    lyr_set(0, "");
+    for (lang = LG_ES; lang <= LG_JA; lang++)
+        for (lyr = 0; lyr < LYR_N; lyr++)
+            for (pos = 0; pos < 127u; pos++) {
+                sing_t a, b;
+                sw_t wa, wb;
+                memset(&a, 0, sizeof a); a.rng = pos + 1u; b = a;
+                memset(&sing_w[0], 0, sizeof sing_w[0]);
+                seek_reference(&trk[0], &a, lang, lyr, pos); wa = sing_w[0];
+                memset(&sing_w[0], 0, sizeof sing_w[0]);
+                sy_seek(&trk[0], &b, lang, lyr, pos); wb = sing_w[0];
+                errors += memcmp(&a, &b, sizeof a) != 0 || memcmp(&wa, &wb, sizeof wa) != 0;
+                count++;
+            }
+    printf("voice: POS equivalence: %u cases, %u differences\n", count, errors);
+    check("POS cycle skipping preserves the original singer and phoneme state at every position", errors == 0);
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 2 && !strcmp(argv[1], "--g2p")) {
@@ -1274,6 +1339,7 @@ int main(int argc, char **argv)
     if (argc > 1)
         demos(argv[1]);
     check_cache();                                       /* (0.9.0; after the demos: they render as before) */
+    check_seek_cycles();
     printf("voice: %s\n", bad ? "FAILED" : "all checks ok");
     return bad != 0;
 }

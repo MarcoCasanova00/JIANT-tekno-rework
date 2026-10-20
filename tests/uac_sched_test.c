@@ -41,6 +41,7 @@ static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 /* core 1, simulated: one job queued, finished at c1_due (or when the ISR waits for it) */
 static uint8_t c1_live = T_C1;
+static int c1_fail_wait;
 static void (*c1_fn)(uint32_t);
 static uint32_t c1_job, c1_done;
 static uint64_t c1_due, c1_wait_ns, c1_wait_max;
@@ -62,6 +63,11 @@ static int c1_post(void (*f)(uint32_t))
 }
 static int c1_wait(void)
 {
+    if (c1_fail_wait) {                               /* a timeout holds the real core before ownership is released */
+        c1_fn = 0;
+        c1_live = 0;
+        return -1;
+    }
     if (c1_fn && c1_due > now_ns) {                    /* the ISR waits for it */
         uint64_t w = c1_due - now_ns;
         c1_wait_ns += w;
@@ -74,6 +80,7 @@ static int c1_wait(void)
 #define UAC_C1_RUN(f) c1_post(f)
 #define UAC_C1_JOB() c1_job
 #define UAC_C1_DONE(j) ((int32_t)(c1_done - (j)) >= 0)
+#define UAC_C1_WAIT() c1_wait()
 #include "../firmware/src/usb.c"
 
 static int fails;
@@ -89,7 +96,7 @@ static double rnd(void) { lcg = lcg * 1664525u + 1013904223u; return (lcg >> 8) 
 /* ---------------------------------------------------------------------------------------- the model --- */
 static struct {
     double fs_dev, host_ppm, load, p_late, late_max;   /* I2S rate; host clock; mean render / half; late halves' share, peak */
-    int legacy, starve, irqoff;                        /* 0.8.8's ack order; starvation bursts; IRQs off bursts (4 ms) */
+    int legacy, starve, irqoff, no_mix_job;            /* also exercise a mix that skips its core-1 job and wait */
 } M;
 static struct {
     uint64_t halves, late, lost, rendered, frames44;   /* I2S halves, late renders, halves lost, rendered, frames */
@@ -209,7 +216,7 @@ static void sim(double secs, uint64_t *t)
         if (blocks && tn == blk_t[0]) {                /* a block of the render done */
             uint32_t i;
             uint64_t w0 = c1_wait_ns;
-            if (blocks == HALF_FRAMES / 32u)           /* (mix_block: its first block waits for core 1, the half queued before) */
+            if (!M.no_mix_job && blocks == HALF_FRAMES / 32u)  /* the mix can skip this wait: uac_tap48 must cover it */
                 c1_wait();
             render_block(32u);
             if (c1_wait_ns != w0)                      /* (the first block waited for core 1: the rest later) */
@@ -303,11 +310,47 @@ static void reset(double host_ppm)
     tx_end = 0;
     have_last = 0;
     c1_fn = 0;
+    c1_live = T_C1;
+    c1_fail_wait = 0;
     c1_job = c1_done = 0;
     c1_wait_ns = c1_wait_max = 0;
     M.host_ppm = host_ppm;
     R.lat_min = 1 << 30;
     R.lat_max = -(1 << 30);
+}
+
+static void test_pending_half(void)
+{
+    int32_t a[64], b[64];
+    uint32_t i, job, frames;
+    if (!T_C1) return;
+    reset(0);
+    for (i = 0; i < 64u; i++) { a[i] = 1000; b[i] = 2000; }
+    uac_render_start();
+    for (i = 0; i < HALF_FRAMES / 32u; i++) uac_tap(a, 32);
+    uac_render_end();
+    job = rq.job; frames = ua_w;
+    uac_render_start();                               /* still pending; no mixing job queues behind the resampler */
+    check("pending live half keeps ownership across render_start", rq.busy && c1_done != job && rs_in[0] == (1000u | 1000u << 16));
+    uac_tap(b, 32);                                   /* must complete / publish the previous half before reusing rs_in */
+    check("USB48 without a mix job: finishes the old half and collects the new block without restarting",
+          c1_done == job && !rq.busy && uac.go && ua_w > frames && rq.nin == 32u &&
+          rs_in[0] == (2000u | 2000u << 16));
+    ua_r += HALF_FRAMES;                              /* the host consumes frames while this half is rendered */
+    for (i = 1; i < HALF_FRAMES / 32u; i++) uac_tap(b, 32);
+    uac_render_end();
+    check("next half is handed over intact after the skipped mix wait", rq.busy && rq.n == HALF_FRAMES);
+    frames = ua_w;
+    uac_render_start();
+    c1_fail_wait = 1;
+    uac_tap(a, 32);
+    check("failed resampler stops core 1, discards the partial half, and does not overwrite its input",
+          !c1_live && !rq.busy && !uac.go && !rq.nin && ua_w == frames && rs_in[0] == (2000u | 2000u << 16));
+    uac_render_start();
+    check("lost core reprimes USB48 on core 0", uac.go && !rq.c1);
+    frames = ua_w;
+    uac_tap(a, 32);
+    check("core-0 fallback resumes producing resampled frames", ua_w > frames);
 }
 
 int main(void)
@@ -321,16 +364,19 @@ int main(void)
     M.load = 0.70;
     M.p_late = 0.043;                                  /* ~15 late halves a second, as the field test's song */
     M.late_max = 1.31;
-    for (k = 0; k < 2u; k++) {
+    test_pending_half();
+    for (k = 0; k < (T_C1 ? 4u : 2u); k++) {
         uint64_t f0, p0, u0, sent0, ren0;
         int64_t drift;
-        reset(PPM[k]);
+        M.no_mix_job = k >= 2u;
+        reset(PPM[k % 2u]);
+        if (M.no_mix_job) puts("-- mix skips its core-1 job: USB48 owns its completion wait");
         sim(2.0, &t);                                  /* settled */
         f0 = R.frames; p0 = R.pkts; u0 = uac.underruns; ren0 = R.frames44; R.jumps = 0;
         R.lat_min = 1 << 30; R.lat_max = -(1 << 30); R.missed = 0;
         sim(180.0, &t);                                /* three minutes */
         snprintf(s, sizeof s, "host %+.0f ppm, 3 min, %.1f late halves/s (peak %.0f %%): %llu packets, %llu tokens with none",
-                 PPM[k], R.late / 182.0, M.late_max * 100, (unsigned long long)(R.pkts - p0), (unsigned long long)R.missed);
+                 PPM[k % 2u], R.late / 182.0, M.late_max * 100, (unsigned long long)(R.pkts - p0), (unsigned long long)R.missed);
         check(s, R.missed == 0 && R.sizes_bad == 0);
         snprintf(s, sizeof s, "  no underrun, overrun or lost half; music continuous (%llu jumps)", (unsigned long long)R.jumps);
         check(s, uac.underruns == u0 && !uac.overruns && !R.lost && !R.jumps);
@@ -352,8 +398,8 @@ int main(void)
         }
         {
             snprintf(s, sizeof s, "  mean packet %.5f frames (device %.1f Hz / host frames %.6f ms)", (double)sent0 / (R.pkts - p0),
-                     M.fs_dev * 160.0 / 147.0, 1.0 + PPM[k] * 1e-6);
-            check(s, fabs((double)sent0 / (R.pkts - p0) - M.fs_dev * 160.0 / 147.0 / 1000.0 * (1.0 + PPM[k] * 1e-6)) < 0.002);
+                     M.fs_dev * 160.0 / 147.0, 1.0 + PPM[k % 2u] * 1e-6);
+            check(s, fabs((double)sent0 / (R.pkts - p0) - M.fs_dev * 160.0 / 147.0 / 1000.0 * (1.0 + PPM[k % 2u] * 1e-6)) < 0.002);
         }
         if (T_C1)
             printf("  core 0 waited for core 1's half (a render right after a late one): %.1f us a second, at most %.0f us\n",

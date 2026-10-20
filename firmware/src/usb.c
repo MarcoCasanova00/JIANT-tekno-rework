@@ -195,6 +195,7 @@ static struct {
 #define UAC_C1_RUN(f) fm1_mc_run(f, 0)
 #define UAC_C1_JOB() fm1_mc_box.job
 #define UAC_C1_DONE(j) fm1_mc_done(j)
+#define UAC_C1_WAIT() fm1_mc_wait()
 #define UAC_C1_TEXT __attribute__((section(".c1_text"), noinline, used))
 #endif
 #ifndef UAC_C1_LIVE              /* one core (host builds, FELUCCA_DUAL_CORE=0): every block resampled at once */
@@ -202,6 +203,7 @@ static struct {
 #define UAC_C1_RUN(f) 0
 #define UAC_C1_JOB() 0u
 #define UAC_C1_DONE(j) 1
+#define UAC_C1_WAIT() 0
 #endif
 #ifndef UAC_C1_TEXT
 #define UAC_C1_TEXT __attribute__((noinline))
@@ -1341,19 +1343,25 @@ static UAC_C1_TEXT void uac_rs_job(uint32_t a)          /* core 1: the half core
     (void)a;
     rq.k = uac_rs_run(rs_in, n <= HALF_FRAMES ? n : 0u, rq.w0);
 }
-/* core 1's half into the ring (its frames are written: only the index moves), if it is done. lost = 1 (a block of the
- * next half: mix_block has waited for core 1's job, queued behind this one): not done is core 1 given up mid-job: the
- * half dropped, the ring primed again */
-static void uac_collect(int lost)
+/* Publish core 1's half only after completion. The mix can skip its job (silent parts / buses), so its wait is not
+ * guaranteed. Before reusing rs_in, wait here if necessary; only a stopped core can relinquish an unfinished half. */
+static void uac_collect(int wait)
 {
-    uint32_t k = rq.k;
+    uint32_t k;
     if (!rq.busy)
         return;
+    if (!UAC_C1_DONE(rq.job) && UAC_C1_LIVE()) {
+        if (!wait)
+            return;
+        (void)UAC_C1_WAIT();                            /* bounded, stops core 1 on a fault / timeout (fm1_multicore.h) */
+        if (!UAC_C1_DONE(rq.job) && UAC_C1_LIVE())
+            return;                                    /* keep ownership if a backend did not finish or stop it */
+    }
     if (!UAC_C1_DONE(rq.job)) {
-        if (lost)
-            rq.busy = uac.go = 0;
+        rq.busy = uac.go = 0;                           /* core 1 stopped: the partial half is discarded */
         return;
     }
+    k = rq.k;                                          /* after DONE's publication barrier, never before it */
     rq.busy = 0;
     if (k <= UA_REND48 + 1u) {                          /* (a wrong word from core 1: the half dropped) */
         RING_PUBLISH();
@@ -1366,8 +1374,8 @@ static __attribute__((noinline)) void uac_tap48(const int32_t *out, uint32_t n)
 {
     uint32_t i, *d;
     if (rq.c1) {
-        uac_collect(1);                                 /* (done: mix_block waited for its job queued behind it) */
-        if (rq.nin + n > HALF_FRAMES)
+        uac_collect(1);                                 /* the mix may have skipped its core-1 job and wait */
+        if (rq.busy || !uac.go || rq.nin + n > HALF_FRAMES)
             return;
         d = &rs_in[rq.nin];
         rq.nin += n;

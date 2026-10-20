@@ -2414,7 +2414,7 @@ static void ui_draw_body(uint32_t counting)
         if (v != view)                                  /* (0.9.0) HUD's HOME entered, its level or set changed: the knob
                                                          * row whole again */
             ui.knob_ms = fm1_ms, view = v;
-        if (h && sys_load && !ui.force && fm1_ms - hud_ms < (sys_load == LOAD_ECO ? 70u : 50u))
+        if (h && LOAD_EFF() && !ui.force && fm1_ms - hud_ms < (LOAD_EFF() == LOAD_ECO ? 70u : 50u))
             skip = 1;
         else if (h) {                                   /* (0.9.0: drawn whole, sent where it changed: gfx.c cv_blit_cells) */
             hud_ms = fm1_ms;

@@ -959,7 +959,8 @@ static void sy_reset(sing_t *s)
 /* POS: syllable k of the lyric (from its start; GEN: its phrases again) */
 static void sy_seek(const track_t *t, sing_t *s, uint32_t lang, uint32_t lyr, uint32_t k)
 {
-    uint32_t w;
+    uint32_t w, first_to = 0, first_tl = 0, first_n = 0, first_w = 0;
+    int text = !lyr && lyr_txt[(uint32_t)(t - trk) % NTRK][0];
     sy_reset(s);
     for (w = 0; w < 64u && k; w++) {
         if (s->wsy >= s->wns && !sy_word_next(t, s, lang, lyr))
@@ -969,6 +970,22 @@ static void sy_seek(const track_t *t, sing_t *s, uint32_t lang, uint32_t lyr, ui
             s->wsy = (uint8_t)(s->wsy + d);
             k -= d;
             s->nsy = (uint16_t)(s->nsy + d);
+        }
+        /* TEXT repeats the same tokens without changing the generator. Once a whole-word cursor repeats, skip
+         * complete cycles in constant time; keep both the 64-word limit and the final word / phoneme state exactly
+         * as the walk left them. GEN still walks: its next phrase depends on its evolving random state. */
+        if (text && k && s->wsy == s->wns) {
+            if (!first_w) {
+                first_to = s->to; first_tl = s->tl;
+                first_n = s->nsy; first_w = w + 1u;
+            } else if (s->to == first_to && s->tl == first_tl) {
+                uint32_t ns = s->nsy - first_n, nw = w + 1u - first_w;
+                uint32_t cycles = ns ? k / ns : 0u, room = (64u - w - 1u) / nw;
+                if (cycles > room) cycles = room;
+                k -= cycles * ns;
+                s->nsy = (uint16_t)(s->nsy + cycles * ns);
+                w += cycles * nw;
+            }
         }
     }
 }
