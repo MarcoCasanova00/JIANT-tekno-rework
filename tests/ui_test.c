@@ -12331,6 +12331,7 @@ static int test_engine_order_099(void)
     return bad;
 }
 
+#ifndef UI_TEST_NO_MAIN                                 /* (tests/fuzz_ui.c: the harness without its tests) */
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -12459,6 +12460,7 @@ int main(void)
     printf(bad ? "ui: %d FAILED\n" : "ui: all passed\n", bad);
     return bad ? 1 : 0;
 }
+#endif
 #endif
 
 /* (0.9.5, as the 0.6.36) JIANT's cards: each its value's heat (the gauge, the value a fifth toward the text), a bipolar

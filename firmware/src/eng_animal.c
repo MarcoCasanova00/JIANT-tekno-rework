@@ -151,7 +151,7 @@ static int32_t cmos_block(const track_t *t, voice_t *v)
 {
     const int16_t *p = t->p;
     uint32_t bits = (uint32_t)v->s[5], ss = (bits >> 2) & 1u, sg = (bits >> 3) & 1u, r = (uint32_t)v->s[7];
-    int32_t vs = v->s[2], vg = v->s[3] & 0xFFFFFF, h = p[P_E4], ah = h < 0 ? -h : h, w, vth, vtl, lw, d8, la, lb, x15;
+    int32_t vs = v->s[2], vg = v->s[3] & 0xFFFFFF, h = clamp(p[P_E4], -64, 64), ah = h < 0 ? -h : h, w, vth, vtl, lw, d8, la, lb, x15;
     int32_t touch = clamp(p[P_E1] * 258 + (v->vel - 100) * 160, 0, 32767), gamt, famt, rf = 256, lvl;
     uint32_t inc;
     if (p[P_E6]) {                                       /* the third: 0.15 .. 3.4 Hz, its charge 60 % of the cycle */

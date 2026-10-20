@@ -272,8 +272,18 @@ static int32_t menu_document(int32_t y, int draw)
     }
     {   /* (0.9.12) the last crash kept (cpu_safe.c crash_log; MANUAL: Troubleshooting) */
         char b[CRASH_LOG_N + 1u];
+        char d[48];
+        uint32_t i;
         y = menu_text("LAST CRASH", y + 4, T_THEME, draw);
-        y = menu_text(crash_log_get(b) ? b : "NONE", y, T_TEXT, draw) - 216 + 8;
+        y = menu_text(crash_log_get(b) ? b : "NONE", y, T_TEXT, draw);
+        for (i = 0; i < CRASH_LINES; i++)               /* (0.9.19) its detail, and the one before */
+            if (crash_about_line(i, d))
+                y = menu_text(d, y, T_TEXT, draw);
+        if (crash_prev_get(b)) {
+            y = menu_text("THE CRASH BEFORE", y + 2, T_MID, draw);
+            y = menu_text(b, y, T_TEXT, draw);
+        }
+        y = y - 216 + 8;
     }
     y = menu_text("CREDITS", y + 216, T_THEME, draw) + 8;
     for (i = 0; i < NELEM(MENU_CREDITS); i++) {

@@ -171,7 +171,8 @@ int main(void)
         p = original; assert(settings_import(&p, sizeof p) == 1);
     }
     {   /* (0.9.12) MENU > SYSTEM > CPU / CPU CLOCK (cpu_safe.c cpu_cfg, favorites.factory[15][17]): 0 in every older
-         * record (2 CORES, 360 MHZ); 0..7 kept and exported; past that back to 0; the crash record's row (13) as saved */
+         * record (2 CORES, 360 MHZ); (0.9.19) every value kept and exported (bit 7 CPU_V2: the 320 MHz default taken);
+         * the crash record's rows (13, and 0.9.19's 8, 6, 9) as saved */
         persist_t q;
         uint32_t b;
         p = original; p.magic = 0x50455233u;
@@ -179,12 +180,18 @@ int main(void)
         for (b = 0; b < 256u; b++) {
             p = original; p.favorites.factory[15][17] = (uint8_t)b;
             memset(p.favorites.factory[13], 'A' + (int)(b % 26u), 32);
-            assert(settings_import(&p, sizeof p) == 1 && favorites.factory[15][17] == (b <= 127u ? b : 0u));
-            settings_export(&q); assert(q.favorites.factory[15][17] == (b <= 127u ? b : 0u) &&
-                                        !memcmp(q.favorites.factory[13], p.favorites.factory[13], 32));
+            memset(p.favorites.factory[8], (int)b, 32);
+            memset(p.favorites.factory[6], (int)(b ^ 0x5A), 32);
+            memset(p.favorites.factory[9], 'B' + (int)(b % 25u), 32);
+            assert(settings_import(&p, sizeof p) == 1 && favorites.factory[15][17] == b);
+            settings_export(&q); assert(q.favorites.factory[15][17] == b &&
+                                        !memcmp(q.favorites.factory[13], p.favorites.factory[13], 32) &&
+                                        !memcmp(q.favorites.factory[8], p.favorites.factory[8], 32) &&
+                                        !memcmp(q.favorites.factory[6], p.favorites.factory[6], 32) &&
+                                        !memcmp(q.favorites.factory[9], p.favorites.factory[9], 32));
         }
         p = original; assert(settings_import(&p, sizeof p) == 1);
-        printf("settings: CPU / CPU CLOCK byte kept, unknown values back to 2 CORES 360 MHZ; the crash row kept   ok\n");
+        printf("settings: CPU / CPU CLOCK byte kept (every bit, 0.9.19); the crash rows (13 8 6 9) kept          ok\n");
     }
     {   /* 1.2 RESTORE LAST (ui.c PREF_RESTORE_OFF, bit 7 of MENU's flags, favorites.factory[15][30]): clear in every
          * older record = ON; set = OFF, kept as saved with the other flags */

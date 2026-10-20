@@ -885,6 +885,8 @@ static void engine_block(track_t *t)
  * One at a time (a load is one track's; a section's six: the others fade on pe_old as before) */
 static int16_t xf_snap[P_COUNT];
 static volatile uint8_t xf_snap_t = 0xFFu;              /* its track, 0xFF none */
+static uint8_t xf_snap_e;                               /* (0.9.19) the engine that sound was on (track_render: no other
+                                                         * engine fades on it) */
 /* (0.6.13) a sound loaded (a preset, a user preset, a section: seq.c panic_req): what still sounds fades out over
  * XF_BLOCKS on the values it had (as an engine switch does), not its release on the new sound's (its filter, its
  * levels: the old notes jumped bright and loud, sharp highs at every preset change); the notes asked for meanwhile
@@ -983,7 +985,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
     bend = midi_bend_q8[ti];
     bend16 = bend >= 0 ? bend / 16 : -((-bend + 15) / 16);
     bend_fine = (bend - bend16 * 16) * 2367 / 2560;
-    uint32_t nr = 0, fade = t->xf_on && t->xf, snap = fade && xf_snap_t == ti;
+    uint32_t nr = 0, fade = t->xf_on && t->xf, snap = fade && xf_snap_t == ti && xf_snap_e == t->engine;
     int32_t damt;
     int16_t pe_new[8], p_new[P_COUNT];
     for (i = 0; i < n; i++)

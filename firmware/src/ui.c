@@ -1128,8 +1128,14 @@ static void load_begin(track_t *t, uint32_t what)
     if (what & LOAD_SOUND) {                      /* (0.6.13) the sound as it is: the fade of what sounds renders
                                                    * with it (voice.c xf_snap), unless one is fading on it now */
         uint32_t k = trk_index(t);
-        if (xf_snap_t == 0xFFu || !trk[xf_snap_t % NTRK].xf_on) {
+        /* (0.9.19) not again over this track's own snapshot while its load is still to reach the audio (panic_req: the
+         * ISR's trk_fade_out not run yet): PRESETS into another engine's sounds and PROGRAM CHANGE load twice in a row
+         * (the engine, then the sound: preset_go, midi_pc_poll), and the second took the first's values, another
+         * engine's, for the old engine to fade out on (tests/xfade_test.c) */
+        if ((xf_snap_t == 0xFFu || !trk[xf_snap_t % NTRK].xf_on) && !(xf_snap_t == k && ((panic_req >> k) & 1u))) {
             memcpy(xf_snap, t->p, sizeof xf_snap);
+            xf_snap_e = t->engine;                /* (the engine rendering it: a switch asked for and not yet made, its
+                                                   * values not this engine's: track_render does not use them) */
             xf_snap_t = (uint8_t)k;
         }
     }

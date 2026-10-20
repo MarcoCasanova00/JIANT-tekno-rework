@@ -120,6 +120,10 @@ static __attribute__((noinline)) void pfx_fire(track_t *t, int arp)
 
 /* the values DEC- / DEC+ took out (pfx_end puts them back) */
 static int16_t pfx_keep[NTRK][4];   /* DEC, REL (DRUM: DECY); ATK; SUS (DEC-) */
+static uint8_t pfx_kdrum;            /* (0.9.19) the tracks pfx_block took as DRUM (their E3 changed, not DEC / REL / ATK):
+                                      * pfx_end puts back what it changed even when the engine switched between the two (the
+                                      * block's engine_block: a switch's fade ending), which left the new engine's E3 40 off,
+                                      * past its range, and its DEC / REL as the drum's (tests/fuzz_ui.c) */
 static uint32_t pfx_qon;            /* (JIANT) the effects in (quantized to the 1/16) */
 
 static int pfx_rec_ok(void);          /* seq.c: REC armed, not a song playing */
@@ -220,6 +224,7 @@ static __attribute__((noinline)) void pfx_block(uint32_t n, uint32_t held)
                 pfx_hush(t);                            /* gated half */
             }
         }
+        pfx_kdrum = (uint8_t)(drum ? pfx_kdrum | 1u << k : pfx_kdrum & ~(1u << k));
         if (f & PFX_DEC) {                              /* the decays, short or long */
             int sh = (on >> PF_DSHT) & 1u;
             uint32_t a = drum ? P_E3 : P_DEC, c = drum ? P_E3 : P_REL;
@@ -250,13 +255,13 @@ static __attribute__((noinline)) void pfx_end(void)
     uint32_t k;
     for (k = 0; k < NTRK; k++)
         if (trk[k].pfx & PFX_DEC) {
-            int drum = trk[k].engine == ENGI_DRUM;
+            int drum = (pfx_kdrum >> k) & 1u;
             trk[k].p[drum ? P_E3 : P_DEC] = pfx_keep[k][0];
             trk[k].p[drum ? P_E3 : P_REL] = pfx_keep[k][1];
             if (!drum)
                 trk[k].p[P_SUS] = pfx_keep[k][3];
         }
     for (k = 0; k < NTRK; k++)
-        if ((trk[k].pfx & PFX_ATK) && trk[k].engine != ENGI_DRUM)
+        if ((trk[k].pfx & PFX_ATK) && !((pfx_kdrum >> k) & 1u))
             trk[k].p[P_ATK] = pfx_keep[k][2];
 }

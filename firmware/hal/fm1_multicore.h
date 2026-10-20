@@ -103,6 +103,7 @@ void __attribute__((section(".c1_text"), noinline, noreturn, used)) fm1_c1_main(
 static void fm1_mc_hold(void)
 {
     fm1_core1_stop();
+    fm1_other_live = 0;
     fm1_mc_on = 0;
 }
 
@@ -133,6 +134,7 @@ static int fm1_mc_start(void)
         return 0;
     }
     fm1_mc_on = 1;
+    fm1_other_live = 1;
     fm1_mc_bar.barred |= 2u;                    /* (0.9.12) a watchdog reset from here on: beside core 1 (main.c) */
     return 1;
 }
@@ -151,6 +153,11 @@ static __attribute__((noinline)) void fm1_mc_park(void)
             fm1_mc_hold();
         }
     }
+    /* (0.9.19) and the cache idle after it, as the AC79 SDK's other-core handler waits before it acks a flash access
+     * (another_cpu_irq): a line core 1 was still filling from its job's code must land before the flash goes off */
+    FM1_C1_SYNC();
+    while (!(*(volatile uint32_t *)0x1EEE008u & 0x4000u))
+        ;
 }
 
 static inline int fm1_mc_run(void (*fn)(uint32_t), uint32_t arg)

@@ -1557,11 +1557,42 @@ static __attribute__((noinline)) int fx_rest(int32_t any, int32_t *wet, uint32_t
     prf_cur.fxrest++;                                   /* (PROFILE: FX REST) */
     return 1;
 }
+/* (0.9.19) the buses' read and write points back inside their lines, once a block before they run: on two cores the
+ * buses are core 1's (mc_job), and its known misread (hal/fm1_multicore.h: bit 21 of a word) in one of them wrote
+ * outside the line, into whatever the pool holds next, before fx_insane could see the sound go wrong (a crash later,
+ * on either core: tests/fuzz_misread.c). A wrong word here now costs a wrong block of sound (and fx_trip then holds
+ * core 1); a right one is never touched */
+static __attribute__((noinline)) void fx_guard(void)
+{
+    uint32_t k;
+    for (k = 0; k < 4u; k++)
+        if (fx.comb_i[k] >= REV_COMB[k])
+            fx.comb_i[k] = 0;
+    for (k = 0; k < 2u; k++)
+        if (fx.ap_i[k] >= REV_AP[k])
+            fx.ap_i[k] = 0;
+    if (fx.dr_sh > 2u || fx.dsw > 2u || fx.dsw_to > 2u || (fx.dsw == 2u && fx.dsw_n >= DLY_LEN / DLY_CLR)) {
+        fx.dr_sh = fx.dr_sh > 2u ? 2u : fx.dr_sh;
+        fx.dsw_to = fx.dr_sh;
+        fx.dsw = 0;
+        fx.dsw_n = 0;
+        dly_lo_reset();
+    }
+    for (k = 0; k < 2u; k++) {
+        if (dlo.d[k].ep >= HB_H || dlo.d[k].op >= HB_N || dlo.ix[k].p >= HB_H || dlo.ir[k].p >= HB_H) {
+            dly_lo_reset();
+            break;
+        }
+    }
+    if (fx.sp_ns > SP_N)
+        fx.sp_ns = SP_N;
+}
 static inline __attribute__((always_inline)) void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
                      uint32_t n)
 {
     uint32_t i, dl = delay_samples();
     int32_t dcd, dcw, ddm;
+    fx_guard();
     {   /* (0.6.14) anything sent to the buses this block: their gate open (fx_gate) */
         int32_t any = 0;
         for (i = 0; i < n; i++)

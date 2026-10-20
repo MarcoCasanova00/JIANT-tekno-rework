@@ -100,6 +100,7 @@ static void fm1_fault(const fm1_crash_t *c)
     fm1_mc_bar.barred = (fm1_mc_bar.barred & ~0xFF00u) | fl << 8;   /* (0.9.12) for the next boot (cpu_boot) */
     fm1_mc_hold();
 #endif
+    fm1_crash.app = (felucca_dbg.in_audio ? 1u : 0u) | (uint32_t)felucca_dbg.stage << 8 | (uint32_t)felucca_dbg.page << 16;
     fm1_audio_stop();
     scr_wake_now();                                   /* (MENU > SCREEN OFF: the panel on first) */
     lcd_fill(0, 0, 240, 240, UI_CRASH_BG);            /* fixed, outside the palettes */
@@ -122,9 +123,18 @@ static void fm1_fault(const fm1_crash_t *c)
         hex8(b + str_len(b), v[i]);
         draw_text_line(10, 84 + 20 * i, 220, &AF_M, b, UI_CRASH_INK, UI_CRASH_BG, 0);
     }
+    str_cpy(b, "SP ", 4);                             /* (0.9.19) the stack, and where the other core was */
+    hex8(b + 3, c->sp);
+    if (c->other) {
+        str_cpy(b + 11, " C2 ", 5);
+        hex8(b + 15, c->other_pc);
+    }
+    draw_text_line(10, 184, 220, &AF_M, b, UI_CRASH_INK, UI_CRASH_BG, 0);
+    draw_text_line(10, 210, 220, &AF_S, "DON'T SWITCH OFF: IT RESTARTS, KEEPS IT", UI_CRASH_INK, UI_CRASH_BG, 0);
     t0 = fm1_ticks();
-    while ((uint32_t)(fm1_ticks() - t0) < 4000u * 1000u * FM1_TICKS_PER_US)
-        ;
+    while ((uint32_t)(fm1_ticks() - t0) < 10000u * 1000u * FM1_TICKS_PER_US)   /* (0.9.19: 10 s, was 4: time for a
+                                                                                   * photo; the watchdog fed) */
+        fm1_wdt_feed();
     fm1_reboot();
 }
 
@@ -181,15 +191,38 @@ static __attribute__((noinline)) uint32_t cpu_boot(void)
     uint32_t fl = 0, cfg = cpu_cfg;
 #if FELUCCA_DUAL_CORE
     uint32_t bar = fm1_mc_bar.barred;
+    crash_det_t d;
+    if (!(cfg & CPU_V2)) {                              /* (0.9.19) 320 MHz the default, once (cpu_safe.c cpu_migrate) */
+        cpu_cfg = (uint8_t)(cfg = cpu_migrate(cfg));
+        settings_save();
+    }
     fm1_mc_bar.barred = bar & ~0xFF02u;                 /* (this run's own from here) */
+    memset(&d, 0, sizeof d);
+    d.clk = (bar >> 20) & 15u ? ((bar >> 20) & 15u) - 1u : 15u;   /* (the boot stage's clock, cpu_clock; 15 unknown) */
+    d.mult = fm1_clk320_mult();
     if (fm1_crash.magic == FM1_CRASH_MAGIC && fm1_crash.count != crash_seen) {
+        uint32_t i;
         fl = (bar >> 8) & 0xFFu;
         crash_log_put(fl, fm1_crash.vec, fm1_crash.pc, fm1_crash.rets, fm1_crash.emu, fm1_crash.dbg);
+        d.core = fm1_crash.cnum & 1u;
+        d.flags = fl | (fm1_crash.app & 1u ? CRD_AUDIO : 0u) | (fm1_crash.other ? CRD_OTHER : 0u);
+        d.stage = (fm1_crash.app >> 8) & 0xFFu;
+        d.page = (fm1_crash.app >> 16) & 0xFFu;
+        d.sp = fm1_crash.sp; d.emu = fm1_crash.emu; d.dbg = fm1_crash.dbg; d.up_ms = fm1_crash.uptime_ms;
+        d.etm0 = fm1_crash.etm[0]; d.etm1 = fm1_crash.etm[1]; d.other_pc = fm1_crash.other_pc;
+        for (i = 0; i < 8u; i++)
+            d.bus[i] = fm1_crash.bus[i];
+        crash_det_put(&d);
     } else if (fm1_boot.p3_rst & 4u) {
         fl = CR_WDT | (bar & 2u ? CR_2C : 0u) | (fm1_clk_320() ? CR_320 : 0u);
         if (fl & CR_2C)
             fm1_mc_bar_set();                           /* (a hang beside the second core: as a crash, fm1_fault) */
         crash_log_put(fl, 0xFFu, felucca_dbg.prev_stage, felucca_dbg.prev_page, 0, 0);
+        d.core = 0xFFu;
+        d.flags = fl;
+        d.stage = felucca_dbg.prev_stage & 0xFFu;
+        d.page = felucca_dbg.prev_page & 0xFFu;
+        crash_det_put(&d);
     } else {
         cpu_cfg = (uint8_t)cpu_retry(cfg);              /* (0.9.13) a clean power-on: after a crash, both cores again
                                                          * on the third */
@@ -215,6 +248,11 @@ static __attribute__((noinline)) void cpu_clock(void)
 #if FELUCCA_DUAL_CORE
     fm1_clk320_t k;
     uint32_t f;
+    f = (uint32_t)fm1_clk320_check(&k);                 /* (0.9.19) the clock as the boot stage left it, for a crash's
+                                                         * record (cpu_boot: which boot stage, V15's 360 or one at 320);
+                                                         * a soft reset keeps the PLL: "already 320" (1) is ours then */
+    if (f != 1u || !(fm1_mc_bar.barred & (15u << 20)))
+        fm1_mc_bar.barred = (fm1_mc_bar.barred & ~(15u << 20)) | (f > 13u ? 14u : f + 1u) << 20;   /* (+1: 0 none) */
     if (!(cpu_cfg & CPU_320) || bootguard.failed || (fm1_mc_bar.barred & (FM1_MC_CLK_ARMED | FM1_MC_CLK_TRIP)))
         return;
     lcd_sync();                                         /* (no LCD DMA through it) */

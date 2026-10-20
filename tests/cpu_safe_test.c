@@ -125,6 +125,58 @@ int main(void)
         check("the second core given up while playing: 1 CORE for good, said",
               cpu_cfg == (CPU_1CORE | CPU_AUTO) && !strcmp(ui.msg, "CORE 2 FAILED: 1 CORE"));
     }
+    {   /* (0.9.19) the watchdog's timeout as the exception (DBG bit 0): WD; the 320 MHz default once */
+        check("(0.9.19) DBG's watchdog bit with no EMU cause: WD (a hang with a red screen); an EMU cause still first",
+              code_is(0, 1u, 0, "WD") && code_is(0, 1u | 1u << 12, 0, "WD") && code_is(2, 1u, 0, "IL"));
+        check("  CPU CLOCK 320 MHZ by default: every older record moved once, 360 set by hand kept after",
+              cpu_migrate(0) == (CPU_V2 | CPU_320) && cpu_migrate(CPU_1CORE | CPU_AUTO) == (CPU_V2 | CPU_320 | CPU_1CORE | CPU_AUTO) &&
+              cpu_migrate(CPU_V2) == CPU_V2 && (cpu_cfg = CPU_V2 | CPU_320, cpu_put(1, 0), cpu_migrate(cpu_cfg) == CPU_V2) &&
+              cpu_after(CPU_V2, CR_2C) == (CPU_V2 | CPU_1CORE | CPU_AUTO) && (cpu_cfg = CPU_V2 | CPU_1CORE | CPU_AUTO,
+              cpu_put(0, 1), cpu_cfg == CPU_V2));
+    }
+    {   /* (0.9.19) the detail rows, the crash before, ABOUT's lines */
+        crash_det_t d, g;
+        char l[48], all[400];
+        uint32_t i;
+        memset(&favorites, 0, sizeof favorites);
+        check("(0.9.19) no detail in a new record, nor in GRAIN's / TRIO's / PHYS's old stars",
+              !crash_det_get(&g) && !crash_prev_get(b) && (memset(favorites.factory[8], 0xA5, 32),
+              memset(favorites.factory[9], 0x5A, 32), !crash_det_get(&g) && !crash_prev_get(b)) &&
+              (memset(&favorites, 0, sizeof favorites), 1));
+        crash_log_put(CR_2C, 1, 0x02820A80u, 0x02034402u, 0u, 1u << 12);
+        memset(&d, 0, sizeof d);
+        d.core = 0; d.flags = CR_2C | CRD_AUDIO | CRD_OTHER; d.stage = 2; d.page = 5; d.sp = 0x01C79E40u; d.emu = 0;
+        d.dbg = 1u << 12; d.up_ms = 754321u; d.etm0 = 0x02001234u; d.etm1 = 0x02005678u; d.clk = 0; d.mult = 270;
+        d.other_pc = 0x0200F2A4u; d.bus[0] = 1; d.bus[3] = 0x100u; d.bus[4] = 0x100u; d.bus[5] = 0; d.bus[6] = 7; d.bus[7] = 9;
+        crash_det_put(&d);
+        crash_log_put(CR_WDT, 0xFFu, 2u, 7u, 0u, 0u);
+        memset(&d, 0, sizeof d);
+        d.core = 0xFFu; d.flags = CR_WDT; d.stage = 2; d.page = 7; d.mult = 240; d.clk = 1;
+        crash_det_put(&d);
+        check("  a second crash: the count goes on, the first one's line kept as the crash before",
+              crash_count() == 2u && crash_prev_get(b) && !strcmp(b, "PC01 2C 9.9.12 02820A80 02034402") &&
+              crash_log_get(b) && !strcmp(b, "WDFF 1C 9.9.12 00000002 00000007"));
+        crash_det_get(&g);
+        check("  its detail read back: a hang (core -), its stage and page, the clock", g.core == 0xFFu && g.stage == 2 &&
+              g.page == 7 && g.mult == 240u && g.clk == 1u && !(g.flags & CRD_AUDIO));
+        memset(favorites.factory[8], 0, 32);
+        memset(&d, 0, sizeof d);
+        d.core = 0; d.flags = CR_2C | CRD_AUDIO | CRD_OTHER; d.sp = 0x01C79E40u; d.dbg = 1u << 12; d.up_ms = 754321u;
+        d.mult = 270; d.other_pc = 0x0200F2A4u; d.bus[3] = 0x100u; d.bus[4] = 0x100u;
+        crash_det_put(&d);
+        all[0] = 0;
+        for (i = 0; i < CRASH_LINES; i++)
+            if (crash_about_line(i, l)) { strcat(all, l); strcat(all, "|"); }
+        check("  ABOUT's lines: count, core, time; SP and where; EMU DBG; core 2's PC; the bus masters; the boot clock",
+              !strcmp(all, "CRASHES 1  CORE 0  UP 754 S|SP 01C79E40  AT AUDIO|EMU 00000000 DBG 00001000|C2 PC 0200F2A4|"
+                           "BUS 00000100 00000000 00000100|CLK BOOT 0 PLL 270|"));
+        for (i = 0; i < CRASH_LINES; i++)
+            if (crash_about_line(i, l) && strlen(l) > 36u) break;
+        check("  every line short (36 characters at most: one line of ABOUT)", i == CRASH_LINES);
+        check("  the rows written: GRAIN's, TRIO's, PHYS's, SLICE's; the settings around them untouched",
+              favorites.factory[7][0] == 0 && favorites.factory[10][0] == 0 && favorites.factory[5][31] == 0);
+        memset(&favorites, 0, sizeof favorites);
+    }
     puts(ok_all ? "cpu_safe: all passed" : "cpu_safe: FAILED");
     return !ok_all;
 }
