@@ -1,0 +1,153 @@
+# pi32v2 benchmark loops of Felucca discussion #283 (zemuro / Ruslan Mazavin, measured on an AC791N): the
+# listing format of build/felucca.dis. fm6_op_run: this firmware's (eng_fm6.c, 0.9.18 build), its first loop
+# measured 40 cycles an iteration. dv_metal_run: upstream Felucca 1.5.1's drum_voice.c (-Os), its inner loop 35.
+# tests/target_budget.py checks tests/pi32_cycles.py against them (BENCH).
+fm6_op_run:
+ 200ae5a:    7e 04             	[--sp] = {rets, r14-r4}
+ 200ae5c:    05 2c             	r5 = [sp+48]
+ 200ae5e:    a7 f0 10 50       	r7 = 0x10 - r5  #
+ 200ae62:    04 2d             		 r4 = [sp+52]
+ 200ae64:    74 d8             	r4 += r7  #
+ 200ae66:    06 2e             		 r6 = [sp+56]
+ 200ae68:    c0 e1 45 bc       	r11 = r4 >>> 5
+ 200ae6c:    c8 ff f8 b2 02 02 	r8 = 33731320 <SINE : 202b2f8 >
+ 200ae72:    11 49             	if (r1 == 0) goto 82 <fm6_op_run+0x6C : 200aec6 >
+ 200ae74:    16 48             	if (r6 == 0) goto 80 <fm6_op_run+0x6C : 200aec6 >
+ 200ae76:    b4 e0 b0 e5       	r14 = r11 + r5
+ 200ae7a:    47 20             	r7 = 0
+ 200ae7c:    49 e0 fe 07       	r9 = 2046 <build/felucca_hot.ll+0x7FE : 7fe >
+ 200ae80:    4a e0 ff 3f       	r10 = 16383 <build/felucca_hot.ll+0x3FFE : 3ffe >
+ 200ae84:    d8 ec 1a 57       	r5 = [r1+r7<<2]
+ 200ae88:    b4 e0 20 c5       	r12 = r2 + r5
+ 200ae8c:    c0 e1 cd 48       	r4 = r12 >> 13
+ 200ae90:    90 e1 42 49       	r4 = r4 & r9
+ 200ae94:    dc ed 42 58       	r5 = h[++r4=r8] (s)
+ 200ae98:    54 ed 42 40       	r4 = h[r4+2] (s)
+ 200ae9c:    b4 e0 42 d5       	r13 = r4 - r5
+ 200aea0:    90 e1 c2 4a       	r4 = r12 & r10
+ 200aea4:    d4 1b             	r4 *= r13
+ 200aea6:    cc ae             	r4 = r4 >>> 14
+ 200aea8:    54 18             	r4 += r5
+ 200aeaa:    f8 e1 40 5e       	r5_r4 = r4 * r14 (s)
+ 200aeae:    d0 e1 0f 48       	r5_r4 >>= 15
+ 200aeb2:    76 a2             	r6 = r7 << 2
+ 200aeb4:    06 18             	r6 += r0
+ 200aeb6:    68 e8 00 64       	[r6+0] += r4
+ 200aeba:    be 18             	r14 += r11
+ 200aebc:    c7 21             	r7 += 1
+ 200aebe:    32 18             	r2 += r3
+ 200aec0:    87 f8 e0 41       	if (r7 != 32) goto -64 <fm6_op_run+0x2A : 200ae84 >
+ 200aec4:    5e 04             	{pc, r14-r4} = [sp++]
+ 200aec6:    11 45             	if (r1 == 0) goto 74 <fm6_op_run+0xB8 : 200af12 >
+ 200aec8:    b5 18             	r5 += r11
+ 200aeca:    46 20             	r6 = 0
+ 200aecc:    49 e0 fe 07       	r9 = 2046 <build/felucca_hot.ll+0x7FE : 7fe >
+ 200aed0:    4a e0 ff 3f       	r10 = 16383 <build/felucca_hot.ll+0x3FFE : 3ffe >
+ 200aed4:    d8 ec 1a 46       	r4 = [r1+r6<<2]
+ 200aed8:    b4 e0 20 c4       	r12 = r2 + r4
+ 200aedc:    c0 e1 cd 78       	r7 = r12 >> 13
+ 200aee0:    90 e1 72 79       	r7 = r7 & r9
+ 200aee4:    dc ed 72 48       	r4 = h[++r7=r8] (s)
+ 200aee8:    54 ed 72 70       	r7 = h[r7+2] (s)
+ 200aeec:    b4 e0 72 d4       	r13 = r7 - r4
+ 200aef0:    90 e1 c2 7a       	r7 = r12 & r10
+ 200aef4:    d7 1b             	r7 *= r13
+ 200aef6:    ff ae             	r7 = r7 >>> 14
+ 200aef8:    74 18             	r4 += r7
+ 200aefa:    f8 e1 40 d5       	r13_r12 = r4 * r5 (s)
+ 200aefe:    d0 e1 0f c8       	r13_r12 >>= 15
+ 200af02:    d8 ec 0b c6       	[r0+r6<<2] = r12
+ 200af06:    b5 18             	r5 += r11
+ 200af08:    c6 21             	r6 += 1
+ 200af0a:    32 18             	r2 += r3
+ 200af0c:    86 f8 e2 41       	if (r6 != 32) goto -60 <fm6_op_run+0x7A : 200aed4 >
+ 200af10:    5e 04             	{pc, r14-r4} = [sp++]
+ 200af12:    16 42             	if (r6 == 0) goto 68 <fm6_op_run+0xFE : 200af58 >
+ 200af14:    b4 e0 b0 15       	r1 = r11 + r5
+ 200af18:    45 20             	r5 = 0
+ 200af1a:    49 e0 fe 07       	r9 = 2046 <build/felucca_hot.ll+0x7FE : 7fe >
+ 200af1e:    4a e0 ff 3f       	r10 = 16383 <build/felucca_hot.ll+0x3FFE : 3ffe >
+ 200af22:    a4 ad             	r4 = r2 >> 13
+ 200af24:    90 e1 42 49       	r4 = r4 & r9
+ 200af28:    dc ed 42 68       	r6 = h[++r4=r8] (s)
+ 200af2c:    54 ed 42 40       	r4 = h[r4+2] (s)
+ 200af30:    c4 1f             	r4 = r4 - r6
+ 200af32:    90 e1 22 7a       	r7 = r2 & r10
+ 200af36:    74 1b             	r4 *= r7
+ 200af38:    cc ae             	r4 = r4 >>> 14
+ 200af3a:    64 18             	r4 += r6
+ 200af3c:    f8 e1 40 71       	r7_r6 = r4 * r1 (s)
+ 200af40:    d0 e1 0f 68       	r7_r6 >>= 15
+ 200af44:    54 a2             	r4 = r5 << 2
+ 200af46:    04 18             	r4 += r0
+ 200af48:    68 e8 00 46       	[r4+0] += r6
+ 200af4c:    b1 18             	r1 += r11
+ 200af4e:    c5 21             	r5 += 1
+ 200af50:    32 18             	r2 += r3
+ 200af52:    85 f8 e6 41       	if (r5 != 32) goto -52 <fm6_op_run+0xC8 : 200af22 >
+ 200af56:    5e 04             	{pc, r14-r4} = [sp++]
+ 200af58:    b4 e0 b0 15       	r1 = r11 + r5
+ 200af5c:    45 20             	r5 = 0
+ 200af5e:    49 e0 fe 07       	r9 = 2046 <build/felucca_hot.ll+0x7FE : 7fe >
+ 200af62:    4a e0 ff 3f       	r10 = 16383 <build/felucca_hot.ll+0x3FFE : 3ffe >
+ 200af66:    a4 ad             	r4 = r2 >> 13
+ 200af68:    90 e1 42 49       	r4 = r4 & r9
+ 200af6c:    dc ed 42 68       	r6 = h[++r4=r8] (s)
+ 200af70:    54 ed 42 40       	r4 = h[r4+2] (s)
+ 200af74:    c4 1f             	r4 = r4 - r6
+ 200af76:    90 e1 22 7a       	r7 = r2 & r10
+ 200af7a:    74 1b             	r4 *= r7
+ 200af7c:    cc ae             	r4 = r4 >>> 14
+ 200af7e:    64 18             	r4 += r6
+ 200af80:    f8 e1 40 71       	r7_r6 = r4 * r1 (s)
+ 200af84:    d0 e1 0f 68       	r7_r6 >>= 15
+ 200af88:    d8 ec 0b 65       	[r0+r5<<2] = r6
+ 200af8c:    b1 18             	r1 += r11
+ 200af8e:    c5 21             	r5 += 1
+ 200af90:    32 18             	r2 += r3
+ 200af92:    85 f8 e8 41       	if (r5 != 32) goto -48 <fm6_op_run+0x10C : 200af66 >
+ 200af96:    5e 04             	{pc, r14-r4} = [sp++]
+
+dv_metal_run:
+       0:    7d 04             	[--sp] = {rets, r13-r4}
+       2:    d0 ec 04 81       	r8 = [r0+20]
+       6:    d0 ec 00 b1       	r11 = [r0+16]
+       a:    d0 ec 0c c0       	r12 = [r0+12]
+       e:    d0 ec 08 d0       	r13 = [r0+8]
+      12:    00 eb 88 00       	{r7, r3} = [r0+]
+      16:    12 44             	if (r2 == 0) goto 72 <dv_metal_run+0x60 : 60 >
+      18:    49 e0 aa 2a       	r9 = 10922 <dv_metal_run+0x2AAA : 2aaa >
+      1c:    4a e0 02 80       	r10 = -32766 <dv_metal_run+0xFFFFFFFFFFFF8002 : ffffffffffff8002 >
+      20:    50 ec 08 41       	r5_r4 = d[r0+24]
+      24:    43 18             	r3 += r4
+      26:    b4 bf             	r4 = r3 >> 31
+      28:    57 d8             	r7 += r5  #
+      2a:    05 68             		 r5 = [r0+32] 
+      2c:    f6 bf             	r6 = r7 >> 31
+      2e:    64 d8             	r4 += r6  #
+      30:    06 69             		 r6 = [r0+36] 
+      32:    5d 18             	r13 += r5
+      34:    c0 e1 df 59       	r5 = r13 >> 31
+      38:    54 d8             	r4 += r5  #
+      3a:    05 6a             		 r5 = [r0+40] 
+      3c:    6c 18             	r12 += r6
+      3e:    c0 e1 cf 69       	r6 = r12 >> 31
+      42:    64 d8             	r4 += r6  #
+      44:    06 6b             		 r6 = [r0+44] 
+      46:    5b 18             	r11 += r5
+      48:    c0 e1 bf 59       	r5 = r11 >> 31
+      4c:    54 18             	r4 += r5
+      4e:    68 18             	r8 += r6
+      50:    c0 e1 8f 59       	r5 = r8 >> 31
+      54:    54 18             	r4 += r5
+      56:    94 1b             	r4 *= r9
+      58:    a4 18             	r4 += r10
+      5a:    94 05             	[r1++=4] = r4
+      5c:    02 ea e0 ff       	if (--r2 != 0) goto -64 <dv_metal_run+0x20 : 20 >
+      60:    20 eb 88 00       	[r0+] = {r7, r3}
+      64:    d0 ec 09 d0       	[r0+8] = r13
+      68:    d0 ec 0d c0       	[r0+12] = r12
+      6c:    d0 ec 01 b1       	[r0+16] = r11
+      70:    d0 ec 05 81       	[r0+20] = r8
+      74:    5d 04             	{pc, r13-r4} = [sp++]
+

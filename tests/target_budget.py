@@ -9,10 +9,17 @@ level of nesting (an inner loop runs several times per sample) and 1 + 8 for a d
 so it is exact run to run, and it catches a render loop that grew (more work per sample, a new divide,
 something not inlined any more). Compared with tests/target_budget.txt at +10 %. The host
 CPU check (regress.c) is the primary one; this one sees the target compiler's code.
+(JIANT 0.9.19) Alongside, not checked against a budget: ~cyc, the cycles of the same loops by tests/pi32_cycles.py's
+model of the pi32v2 (Felucca discussion #283, zemuro / Ruslan Mazavin's measurements on an AC791N: load and multiply
+latencies, store runs, bundles, taken branches and their targets, fetch alignment), and its cycles per instruction;
+the model is checked here against the two loops measured there (tests/pi32_bench.dis, BENCH).
   tests/target_budget.py [DIS [BUDGET]]      BUDGET_UPDATE=1 rewrites BUDGET"""
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pi32_cycles                                              # noqa: E402
 
 FUNCS = ["analog_render", "digital_render", "digital_render_legacy", "digital_render_custom", "phase_render", "lofi_render", "formant_render",
          "wheel_render", "wheel_block", "analog_ext", "analog_morph", "lofi_byte_render",   # (JIANT 0.4: SYNC RING SAW3, BYTE)
@@ -41,6 +48,12 @@ DIV_W = 8                       # a divide weighs 1 + 8 instructions
 NEST = 4                        # an instruction in a loop inside a loop weighs 4, two deep 16, ...
 MAXD = 4
 
+# (0.9.19) the cycle model against #283's measurements: (function, loop head index in the function, cycles an
+# iteration measured); the estimate within BENCH_TOL
+BENCH = [("fm6_op_run", 0, 40), ("dv_metal_run", 0, 35)]
+BENCH_TOL = 0.05
+BENCH_DIS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pi32_bench.dis")
+
 dis = sys.argv[1] if len(sys.argv) > 1 else "build/felucca.dis"
 budget = sys.argv[2] if len(sys.argv) > 2 else "tests/target_budget.txt"
 LABEL = re.compile(r"^([A-Za-z_][A-Za-z_0-9.]*):$")
@@ -66,14 +79,15 @@ def functions(path):
     return out
 
 
-def cost(insns):
+def cost(insns, edges=None):
     """loops: one span per loop head (the farthest backward branch to it); an instruction inside d
-    spans weighs NEST ** (d - 1) (an inner loop runs several times per pass of the outer one)"""
+    spans weighs NEST ** (d - 1) (an inner loop runs several times per pass of the outer one). (0.9.19) edges: the
+    backward branches that close a loop (pi32_cycles.back_edges: not the jump back of a block laid out of line)"""
     lo = insns[0][0]
     heads = {}
     for a, t in insns:
         m = TARGET.search(t)
-        if m and lo <= int(m.group(1), 16) < a:
+        if m and lo <= int(m.group(1), 16) < a and (edges is None or a in edges):
             h = int(m.group(1), 16)
             heads[h] = max(heads.get(h, a), a)
     n = divs = calls = 0
@@ -92,12 +106,34 @@ def cost(insns):
     return {"insns": len(insns), "loop": n, "div": divs, "call": calls, "cost": w}
 
 
+def bench():
+    """the cycle model against the loops measured in #283; the number of misses"""
+    fns = pi32_cycles.parse(BENCH_DIS, {b[0] for b in BENCH})
+    bad = 0
+    for name, got, want in pi32_cycles.micro():
+        bad += got != want
+        if got != want:
+            print(f"target: cycle model: {name}: {got:g} cycles, measured {want} (#283) OFF")
+    print(f"target: cycle model: {len(pi32_cycles.MICRO) - bad} of #283's {len(pi32_cycles.MICRO)} timing rules "
+          "reproduced" + ("" if not bad else " (FAIL)"))
+    for name, k, want in BENCH:
+        got = pi32_cycles.function(fns[name])["loops"][k]["cyc_iter"]
+        ok = abs(got - want) <= want * BENCH_TOL
+        bad += not ok
+        print(f"target: cycle model: {name} loop {k}: {got:.0f} cycles an iteration, measured {want} (#283) "
+              + ("ok" if ok else f"OFF (more than {BENCH_TOL * 100:.0f} %)"))
+    return bad
+
+
 def main():
+    fail = bench()
     if not os.path.exists(dis):
         print(f"target: skip ({dis} missing: run ./build.sh)")
-        return 0
+        return 1 if fail else 0
     fns = functions(dis)
-    res = {n: cost(fns[n]) for n in FUNCS if fns.get(n)}
+    parsed = pi32_cycles.parse(dis, set(FUNCS))
+    res = {n: cost(fns[n], pi32_cycles.back_edges(parsed[n]) if n in parsed else None) for n in FUNCS if fns.get(n)}
+    cyc = {n: pi32_cycles.function(f) for n, f in parsed.items() if n in res}
     missing = [n for n in FUNCS if n not in res and n not in OPTIONAL]
     base = {}
     if os.path.exists(budget):
@@ -114,7 +150,6 @@ def main():
                 if n not in OPTIONAL:
                     f.write(f"{n} {r['cost']}\n")
         print(f"target: budget {budget} rewritten ({len(res)} functions)")
-    fail = 0
     for n in missing:
         print(f"target: FAIL {n} not found in {dis} (renamed? inlined? update FUNCS)")
         fail += 1
@@ -127,8 +162,11 @@ def main():
                 fail += 1
             elif r["cost"] < b * (1 - TOL):
                 state = f"note: {(r['cost'] / b - 1) * 100:.0f} % (BUDGET_UPDATE=1 to keep it)"
+        c = cyc.get(n, {}).get("cyc", 0)
+        cpi = f"{c / cyc[n]['ins']:.2f}" if c and cyc[n]["ins"] else "-"
         print(f"target: {n:15s} {r['insns']:5d} instructions, {r['loop']:4d} in loops, {r['div']} divides, "
-              f"{r['call']:2d} calls there: cost {r['cost']:5d} (budget {b if b is not None else '-'}) {state}")
+              f"{r['call']:2d} calls there: cost {r['cost']:5d} (budget {b if b is not None else '-'}) ~cyc {c:6.0f} "
+              f"({cpi}/insn) {state}")
     return 1 if fail else 0
 
 
