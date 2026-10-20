@@ -479,11 +479,16 @@ static void fm6_render(track_t *t, voice_t *v, int32_t *out, uint32_t len, const
     a = (mulq15(m->amp0, k) * (int32_t)(256u - n->trim)) >> 8;
     da = (((mulq15(m->amp1, k) * (int32_t)tb) >> 8) - a) >> FM6_LG_N;
     n->trim = fm6_trim[tr];
-    for (i = 0; i < FM6_N; i++) {
-        int32_t x = bus[i] - n->dc;
-        n->dc += x >> 10;                                 /* a one-pole high-pass, ~7 Hz: FM puts sidebands at 0 Hz */
-        a += da;
-        out[i] += (int32_t)(((int64_t)x * a) >> 26);
+    {
+        int32_t dc = n->dc;                               /* (0.9.19: in a register; through n it was loaded and
+                                                           * stored every sample: out might alias it) */
+        for (i = 0; i < FM6_N; i++) {
+            int32_t x = bus[i] - dc;
+            dc += x >> 10;                                /* a one-pole high-pass, ~7 Hz: FM puts sidebands at 0 Hz */
+            a += da;
+            out[i] += (int32_t)(((int64_t)x * a) >> 26);
+        }
+        n->dc = dc;
     }
 }
 

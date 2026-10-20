@@ -5,6 +5,11 @@
  * oscillator at amp = 1.0 (Q15 32767) contributes VOICE_FS. */
 #define VOICE_FS 24000           /* per-voice level: one voice peaks near -6 dBFS before the master */
 
+/* (JIANT 0.9.19) the rare side of a branch in a per-sample loop: laid out of the straight path, so the common case
+ * falls through. On the pi32v2 a taken branch costs 6 cycles (9 when its targets do not stay in the predictor), one
+ * not taken 1 (Felucca discussion #283, zemuro / Ruslan Mazavin's measurements); the arithmetic is unchanged */
+#define DSP_RARE(c) __builtin_expect(!!(c), 0)
+
 static inline int32_t mulq15(int32_t a, int32_t b) { return (a * b) >> 15; }
 /* a * k / 65536 without 64-bit: a up to 2^31, k Q16 */
 static inline int32_t mulq16(int32_t a, uint32_t k)
@@ -27,13 +32,13 @@ static inline int32_t blep(uint32_t ph, uint32_t inc)
 {
     uint32_t d = inc >> 15;
     int32_t x;
-    if (!d)
+    if (DSP_RARE(!d))
         return 0;
-    if (ph < inc) {
+    if (DSP_RARE(ph < inc)) {                       /* (0.9.19: the edges rare, out of the straight path) */
         x = (int32_t)(ph / d);                       /* 0..32767 */
         return x + x - ((x * x) >> 15) - 32768;
     }
-    if (ph > 0xFFFFFFFFu - inc) {
+    if (DSP_RARE(ph > 0xFFFFFFFFu - inc)) {
         x = -(int32_t)((0xFFFFFFFFu - ph) / d);       /* -32767..0 */
         return ((x * x) >> 15) + x + x + 32768;
     }
@@ -61,7 +66,7 @@ static inline int32_t osc_tri(uint32_t ph)
 static inline int32_t softclip(int32_t x)
 {
     int32_t a = x < 0 ? -x : x, i = a >> 8, y;
-    if (i >= 256)
+    if (DSP_RARE(i >= 256))
         y = TANH_Q15[256];                           /* continuous with the table */
     else
         y = TANH_Q15[i] + (((TANH_Q15[i + 1] - TANH_Q15[i]) * (a & 255)) >> 8);
@@ -134,7 +139,7 @@ static inline int32_t voice_amp(int32_t s, const vmod_t *m, uint32_t i)
 static inline int32_t soft_knee(int32_t y, int32_t k)
 {
     int32_t a = y < 0 ? -y : y;
-    if (a <= k)
+    if (!DSP_RARE(a > k))
         return y;
     a = k + (softclip((a - k) * 2) >> 1);
     return y < 0 ? -a : a;

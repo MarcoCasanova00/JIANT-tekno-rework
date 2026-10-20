@@ -1910,6 +1910,72 @@ static __attribute__((noinline)) void drum_mix(int32_t *ol, int32_t *or_, uint32
 
 /* one synth part into the dry mix and the sends; a part with no voice sounding costs
  * the LFO tick and a cleared buffer only (after the DIST tail has run out) */
+/* (0.9.19) a part's dry mix (mix_part): its block b at the level ramp (lq += dl a sample) into ol / or_ at the pan's
+ * (gl, gr), the scaled samples kept in xb for the sends; returns the peak (from pk). A function of its own (in RAM,
+ * tools/build.py HOT_FNS; both cores call it), so that its loop has the registers to itself: inlined in mix_part
+ * it reloaded most of its values from the stack every sample */
+typedef struct { int32_t lq, dl, gl, dgl, gr, dgr; } mix_ramp_t;
+static __attribute__((noinline)) int32_t mix_dry(const int32_t *b, int32_t *ol, int32_t *or_, int32_t *xb, uint32_t n,
+                                                 const mix_ramp_t *rp, int32_t pk)
+{
+    int32_t lq = rp->lq, dl = rp->dl, gl = rp->gl, dgl = rp->dgl, gr = rp->gr, dgr = rp->dgr;
+    const int32_t *e = b + n;
+    while (b < e) {                                     /* (pointers: no index arithmetic before each address) */
+        int32_t x = ((*b++ >> 2) * (lq >> 8)) >> 10, a = x < 0 ? -x : x;   /* pre-shift: 8 loud voices */
+        pk = a > pk ? a : pk;
+        *xb++ = x;
+        *ol++ += (x * gl) >> 12;
+        *or_++ += (x * gr) >> 12;
+        lq += dl;
+        gl += dgl;
+        gr += dgr;
+    }
+    return pk;
+}
+
+/* (0.9.19) a part's send: its scaled block x (mix_part) into the bus at the send's gain g, clamped (sends: mulq15 would
+ * overflow on loud chords at a high LEVEL) */
+static inline __attribute__((always_inline)) void mix_send(int32_t *dst, const int32_t *x, uint32_t n, int32_t g,
+                                                           int32_t xmax)
+{
+#if FELUCCA_REP && defined(__PI32V2__)
+    /* (0.9.19, FELUCCA_REP=1, off by default: not yet timed on the device) the pi32v2's zero-overhead loop, as the
+     * vendor's own mixing code has it: rep runs its body (<= 32 bytes) n times with no branch; an interrupt can stop
+     * it between passes, its count left in the register, and the branch after it resumes it. The same arithmetic:
+     * clamp(v, -xmax, xmax) = smin(smax(v, -xmax), xmax) (xmax >= 1), mulq15 a 32-bit product >>> 15 */
+    if (n) {
+        int32_t c = (int32_t)n, nx = -xmax, t = *x++, u;   /* (each pass loads the next sample in its shadow: the
+                                                         * last pass reads one past x's end, unused) */
+        __asm__ volatile("1:\n\t"
+                         "rep %[c] {\n\t"
+                         "%[u] = smax(%[t], %[nx])\n\t"
+                         "%[t] = [%[x]++=4]\n\t"
+                         "%[u] = smin(%[u], %[xm])\n\t"
+                         "%[u] *= %[g]\n\t"
+                         "%[u] = %[u] >>> 15\n\t"
+                         "[%[d]+0] += %[u]\n\t"
+                         "%[d] += 4\n\t"
+                         "}\n\t"
+                         "if (%[c] != 0) goto 1b\n"
+                         : [c] "+r"(c), [x] "+r"(x), [d] "+r"(dst), [t] "+r"(t), [u] "=&r"(u)
+                         : [nx] "r"(nx), [xm] "r"(xmax), [g] "r"(g)
+                         : "memory");
+    }
+#else
+    const int32_t *e = x + (n & ~1u);
+    while (x < e) {                                     /* (two a pass: one taken branch for both, the second's
+                                                         * loads in the first's shadow) */
+        int32_t a = clamp(x[0], -xmax, xmax), b = clamp(x[1], -xmax, xmax);
+        dst[0] += mulq15(a, g);
+        dst[1] += mulq15(b, g);
+        x += 2;
+        dst += 2;
+    }
+    if (n & 1u)
+        dst[0] += mulq15(clamp(x[0], -xmax, xmax), g);
+#endif
+}
+
 static inline __attribute__((always_inline)) void mix_part(track_t *t, uint32_t n)   /* (0.6.78: inlined in both
                                                          * copies of mix_part_m, flash and RAM) */
 {
@@ -1994,20 +2060,21 @@ static inline __attribute__((always_inline)) void mix_part(track_t *t, uint32_t 
             int32_t *const sx[3] = {sc, sd, sr};
             drum_mix(ol, or_, n, lq, dl, gl, dgl, gr, dgr, pm0, pm1, sx);
         }
-        for (i = 0; i < n; i++, lq += dl, gl += dgl, gr += dgr) {
-            int32_t x = ((b[i] >> 2) * (lq >> 8)) >> 10, a = x < 0 ? -x : x;   /* pre-shift: 8 loud voices */
-            int32_t xs = clamp(x, -xmax, xmax);         /* sends: mulq15 would overflow */
-            if (a > pk)
-                pk = a;
-            if (c)
-                sc[i] += mulq15(xs, c);
-            if (d)
-                sd[i] += mulq15(xs, d);
-            if (r)
-                sr[i] += mulq15(xs, r);
-            ol[i] += (x * gl) >> 12;
-            or_[i] += (x * gr) >> 12;
+        /* (0.9.19) two passes: the dry mix (and the scaled part kept), then each send that is on, a loop of its own.
+         * As one loop (mix_part is inlined in a large function) it kept ~16 values on the stack, reloaded every
+         * sample, and tested the three sends per sample (a taken branch, 6 cycles on the pi32v2, for each one off:
+         * Felucca discussion #283, zemuro / Ruslan Mazavin's measurements). The same sums, bit for bit */
+        int32_t xb[CTL + 1];                            /* (+1: mix_send's rep loop reads one past) */
+        {
+            const mix_ramp_t rp = {lq, dl, gl, dgl, gr, dgr};
+            pk = mix_dry(b, ol, or_, xb, n, &rp, pk);
         }
+        if (c)
+            mix_send(sc, xb, n, c, xmax);
+        if (d)
+            mix_send(sd, xb, n, d, xmax);
+        if (r)
+            mix_send(sr, xb, n, r, xmax);
         uint32_t st = ti;                               /* (0.8.0) the stem the last of the mix goes to */
         if (uin && !t->p[P_MUTE] && !((trk_hush >> ti) & 1u)) {   /* (0.7.5) the host's audio, in its stem too */
             if (fx_stems == 2u) {                       /* (0.8.0) STEMS+IN: in a stem of its own */

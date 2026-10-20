@@ -69,8 +69,11 @@ static void pd_setup(pd_t *b, uint32_t w, uint32_t dcw)
     b->x = x;
 }
 
-/* one sample at phase ph (16 bit): bipolar Q15 */
-static int32_t pd_wave(const pd_t *b, uint32_t ph)
+/* one sample at phase ph (16 bit): bipolar Q15. (JIANT 0.9.19) Inlined in phase_render's loop (up to three a
+ * sample): a call there and back is two taken branches and its registers saved and restored, and the loop's
+ * branch targets past three go cold (9 cycles a taken branch on the pi32v2, Felucca discussion #283, zemuro /
+ * Ruslan Mazavin's measurements); pd_wave, the same as a function, for the UI's drawing */
+static inline __attribute__((always_inline)) int32_t pd_wave_i(const pd_t *b, uint32_t ph)
 {
     uint32_t pd, x = b->x;
     switch (b->w) {
@@ -117,6 +120,7 @@ static int32_t pd_wave(const pd_t *b, uint32_t ph)
     }
     return pd_cos(pd);
 }
+static int32_t pd_wave(const pd_t *b, uint32_t ph) { return pd_wave_i(b, ph); }
 
 static void phase_note_on(track_t *t, voice_t *v)
 {
@@ -167,9 +171,9 @@ static void phase_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         {
             uint32_t pp = ((ph0 >> 16) + (uint32_t)((((f1 + f2) >> 1) * (fb >> 8)) >> 8)) & 0xFFFFu;
             fb += dfb;
-            s = pd_wave(tg0 ? &b2 : &b1, pp);
+            s = pd_wave_i(tg0 ? &b2 : &b1, pp);
             if (mf && !tg0)
-                s += ((pd_wave(&bm, pp) - s) * (mf >> 8)) >> 8;
+                s += ((pd_wave_i(&bm, pp) - s) * (mf >> 8)) >> 8;
             mf += dmf;
         }
         f2 = f1;
@@ -179,7 +183,7 @@ static void phase_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
             tg0 ^= 1;
         if (line2) {
             uint32_t old2 = ph1;
-            int32_t s2 = pd_wave(tg1 ? &b2 : &b1, ph1 >> 16);
+            int32_t s2 = pd_wave_i(tg1 ? &b2 : &b1, ph1 >> 16);
             ph1 += inc2;
             if (ph1 < old2)
                 tg1 ^= 1;

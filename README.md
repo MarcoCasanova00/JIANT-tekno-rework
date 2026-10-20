@@ -692,6 +692,26 @@ JIANT's modifications are distributed under the same license.
 
 Every update is listed here, newest first. (Since 0.6.80 at the end of the page: what the synth does comes first.)
 
+### v0.9.19 (in progress)
+The sound's code timed against the FM-1's own processor: more headroom, the same sound.
+- **A cycle model of the pi32v2** (tests/pi32_cycles.py, run with the tests): the load, multiply and branch timing that
+  **zemuro (Ruslan Mazavin)** measured on the AC791N and published in Felucca's discussion #283 — thank you. It
+  reproduces his twelve timing rules and both loops he timed (FM6's operator, 40 cycles; upstream's metal source, 35),
+  estimates every render loop's cycles beside the old instruction count, and names its hazards (a loaded value or a
+  product used at once, an index used as an address at once, store runs, divides, taken branches and their targets).
+  tests/pi32_rank.py ranks the audio path's functions by it.
+- **ANALOG ~30 % fewer cycles a voice** (SAW, no NOISE: ~230 → ~163 a sample): the polyBLEP's edges, the NOISE and the
+  filter's soft knee are laid out off the straight path (a taken branch is 6 cycles, 9 once a loop has more than three
+  places to jump to), SAW goes first instead of through the WAVE's jump table. Every oscillator with a polyBLEP gains.
+- **The parts' mix** (each part into the mix and its three sends, 128 samples a part each audio half): the dry mix a
+  function of its own in RAM (it reloaded ~16 values from the stack every sample), each send that is on a loop of its
+  own: ~112 → ~86 cycles a sample with the sends on, ~92 → ~40 with them off.
+- **PHASE**: its wave's bend inlined in the loop (a call per wave, up to three a sample): ~17 cycles a sample with one
+  line, ~85 with LINE 2 and MORPH. **FM6**: the output's DC blocker kept in a register.
+- **FELUCCA_REP=1** (a build option, off until timed on the device): the sends' loop as the pi32v2's zero-overhead
+  `rep` loop, resumed after an interrupt as the vendor's own code does (~16 → ~12 cycles a sample a send, modelled).
+- All bit for bit (every golden render the same). Flash +1.5 KB (14.4 KB free), RAM code +260 B.
+
 ### v0.9.18
 RATCH and ARP over the steps, the components regrouped, rolls that stay where they belong, COMP showing its step, and
 the BAR page gone; the LFO's MODE; the MENU as pages.
