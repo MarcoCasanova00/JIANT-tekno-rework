@@ -1890,6 +1890,30 @@ async function installerPage() {
 }
 
 /* (0.9.11) 404.html: old and mistyped links to the page they meant */
+/* (0.9.19) VIS FEED (web/visfeed.mjs against the stream tests/visfeed_test.c wrote, build/host/visfeed.bin, and what
+   the C decoder made of it, visfeed.json): the same frames, records, events and every field; SUB's bytes */
+async function visFeed() {
+  const { VisFeed, VF } = await import("./visfeed.mjs");
+  const bin = join(FW_ROOT, "build/host/visfeed.bin"), js = join(FW_ROOT, "build/host/visfeed.json");
+  ok(VF.T1.length === 0x30 && VF.G1.length === 0x1B && VF.T2.length === 8 && VF.G2.length === 3, "visfeed: the field tables as the firmware's (0x30 + 8 a track, 0x1B + 3 global)");
+  ok(eq(Array.from(VisFeed.sub(5, 30, 0)), [0xF0, 0x7D, 0x4A, 0x56, 1, 0, 5, 0, 0, 30, 0, 0xF7]), "visfeed: SUB F0 7D 4A 56 01 00 seq 00 00 rate flags F7");
+  if (!existsSync(bin) || !existsSync(js)) { console.log("visfeed: skip (run tests/visfeed_test first)"); return; }
+  const raw = readFileSync(bin), want = JSON.parse(readFileSync(js, "utf8"));
+  const evs = [];
+  const d = new VisFeed((e) => evs.push(e));
+  for (let i = 0; i + 4 <= raw.length; i += 4) d.packet(raw.subarray(i, i + 4));
+  ok(d.frames === want.frames && d.events === want.events && d.records === want.records && d.bad === 0,
+     `visfeed: the C test's stream decoded: ${d.frames} frames, ${d.records} records, ${d.events} events (as C)`);
+  let same = true;
+  for (let k = 0; k < 6; k++) for (let i = 0; i < 0x70; i++) same &&= (d.trk[k][i] === null ? -1 : d.trk[k][i]) === want.trk[k][i];
+  for (let i = 0; i < 0x70; i++) same &&= (d.glo[i] === null ? -1 : d.glo[i]) === want.glo[i];
+  ok(same, "visfeed: every field of every track and the globals as the C decoder has them");
+  ok(d.hello && d.hello.ver === 1 && d.hello.ntrk === 6 && d.hello.nt1 === 0x30 && d.hello.ng1 === 0x1B && d.hello.fw === "TEST",
+     "visfeed: HELLO (v1, 6 tracks, the field counts, the firmware's version)");
+  ok(evs.some((e) => VF.EV[e.kind] === "NOTE") && evs.some((e) => VF.EV[e.kind] === "BEAT") && evs.some((e) => VF.EV[e.kind] === "TRANSPORT"),
+     "visfeed: NOTE, BEAT and TRANSPORT events among them");
+  ok(typeof d.global("BPM") === "number" && d.track(0, "E0") !== undefined && d.track(0, "LEVEL") !== undefined, "visfeed: fields by name");
+}
 function siteRedirects() {
   const html = readFileSync(join(HERE, "404.html"), "utf8");
   const src = html.slice(html.indexOf("/*REDIRECT-BEGIN*/"), html.indexOf("/*REDIRECT-END*/"));
@@ -1940,5 +1964,6 @@ await installerBrowsers();
 installerStrings();
 await installerPage();
 siteRedirects();
+await visFeed();
 console.log(failed ? `WEB TESTS FAILED (${failed})` : "web tests passed");
 process.exit(failed ? 1 : 0);

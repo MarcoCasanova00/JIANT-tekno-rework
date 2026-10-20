@@ -41,6 +41,11 @@
 #                   editor (MENU_DESC / MENU_SET: every item, clamping, unknown ids, saving, USB SERIAL applied later).
 # LIVE (tests/live_test.c, 0.9.11): GLO > LIVE's modifiers (seq_live.c, ui_live.c): their timing, the ghost, RETURN, BYPASS,
 #                   COMMIT + UNDO, recording at the ghost, MANO's keys, RIELES' PISTAS, the GLO chain.
+# VIS FEED (tests/visfeed_test.c, 0.9.19): the synth's state for the Stems app's visuals (src/visfeed.c, docs/VISFEED.md),
+#                   decoded as the app does (tests/visfeed_decode.h; web/visfeed.mjs the same in JavaScript, web/test_web.mjs
+#                   decodes the stream the C test wrote): nothing without a subscription, MIDI OUT ALL packet for packet
+#                   the same, HELLO and MENU > VIS FEED OFF, every field equal to the synth's, the rate, change detection,
+#                   keyframes, the events, the lapse, the budget (the SysEx ring at most half full), the editor answered.
 # RATCH (tests/ratchet_test.c): a step's ratchet (x1..x4): its parts in the sequencer (equal, gated, chords and drum
 #                   hits whole, one chance roll, swing, no slide or tie out, STOP), FUN8 round trip and older projects x1,
 #                   user preset patterns, SEQ > CHANCE KNOB 3 and the roll / grid drawing.
@@ -288,6 +293,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/editor_test" tests/editor_test.c -lm
     run "editor: real C protocol, malformed transfers, queue recovery, MENU settings (writes build/host/menu.json)" \
         env MENU_JSON="$OUT/menu.json" "$OUT/editor_test"
+    $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/visfeed_test" tests/visfeed_test.c -lm
+    run "VIS FEED (0.9.19): nothing without a SUB and MIDI OUT untouched, HELLO / OFF, the whole state and each field the synth's, 30 Hz with change detection and keyframes, events, the lapse, the budget, the editor still answered (writes build/host/visfeed.bin)" "$OUT/visfeed_test"
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/robust_test" tests/robust_test.c -lm
     run "robustness: engine numbers, retained old projects, preset patterns, malformed requests" \
         "$OUT/robust_test"

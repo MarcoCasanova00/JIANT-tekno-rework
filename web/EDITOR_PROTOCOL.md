@@ -896,6 +896,9 @@ LEARN CLEAR (an action), neither offered over MENU_DESC: the MIDI LEARN map is k
 favourites row of engine 1, DIGITAL, bytes 2..31: ten entries of CC | 0x80, track, parameter code; `src/midi_learn.c`),
 so a settings backup carries it; there is no command to read or edit it.
 
+(JIANT 0.9.19) MENU id 25: **VIS FEED** (ON / OFF; a row of MIDI): the synth's state for the JIANT Stems app's visuals, its own
+SysEx family `F0 7D 4A 56 …` (not the editor's `7D 46 4C`), documented in `docs/VISFEED.md`; an editor need not know it.
+
 (JIANT 0.9.18) The MENU is regrouped as the device's pages (no id, index, value or default changes; nothing stored
 changes): count 25, tabs **0 SCREEN, 1 AUDIO, 2 MIDI, 3 USB, 4 SYSTEM**. Each item's tab: SCREEN COLOR (0), STYLE (1),
 LARGE (2), ANIMATION (3), LED GLOW (4), SCALE LEDS (16), SCREEN SLEEP (17), SKIN (21), SCOPE (22); AUDIO BPM LOCK (8),

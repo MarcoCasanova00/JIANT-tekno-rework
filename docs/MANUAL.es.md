@@ -2263,6 +2263,7 @@ configuración guardada ni para el editor.)
 | MIDI › MIDI | 1 | MIDI OUT | **KEYS**, CLOCK, ALL, OFF — qué sale por USB MIDI (ver [14](#14-midi-y-usb)) |
 | | 2 | LEARN | **OFF**, ON — (0.9.12) arma MIDI LEARN: una perilla girada elige su parámetro, el próximo CC queda aprendido (ver [MIDI LEARN](#midi-learn-0912)); no se guarda, OFF al encender |
 | | 3 | LEARN CLEAR | una acción: la tarjeta muestra cuántos CC hay aprendidos (NONE, 3 CC …); KNOB 3 a la derecha la arma, OCT+ los olvida todos |
+| | 4 | VIS FEED | **ON** (por defecto), OFF — (0.9.19) el estado del sinte para los visuales de la app JIANT Stems por USB-MIDI; se manda solo mientras la app lo pide (ver [14](#14-midi-y-usb)) |
 | USB › USB | 1 | USB AUDIO | CONSOLE (la consola serie con audio USB estéreo, por defecto), STEREO (audio + MIDI solamente, clase 0: ayuda a que macOS 13–15 vea la entrada de audio USB), STEMS (0.7.1: una entrada de audio de 8 canales), IN+OUT (0.7.5: audio estéreo en los dos sentidos), STEMS+IN (0.8.0: los stems con la salida de audio también) — era SYSTEM › USB; se aplica al cerrar el MENU |
 | | 2 | USB LEVEL | MASTER (el USB sigue la perilla MASTER), FIXED (USB a nivel pleno), −6 / −12 / −18 / −24 dB (USB fijo y atenuado: para un celular o una compu cuya entrada satura a nivel pleno) |
 | SYSTEM › CONTROLS | 1 | HOLD TIME | 0.3 s, **0.4 s** (por defecto), 0.5 s, 0.6 s — cuánto mantener un botón para que abra su capa (era HOLD) |
@@ -2326,6 +2327,18 @@ si nunca se midió, supone que el FM-1 es 1,6 veces más pesado que la estimaci�
   siguiente, como las teclas de la capa de la canción; parado: en el momento; si está vacía, lo avisa); los programas
   **16–23** cargan el proyecto **1–8** con su sección A (solo parado, como SAVE > SECTIONS). Un pedal MIDI o un DAW
   pueden llevar un set entero.
+- **VIS FEED** (0.9.19; MENU > MIDI > **VIS FEED**, ON por defecto): el estado del sinte para los visuales de la app
+  **JIANT Stems**, por USB-MIDI en un SysEx propio de JIANT (`F0 7D 4A 56 …`): por pista el motor, el mute, el filtro
+  como se escucha, la envolvente, las voces, el LFO (valor, rate, onda, fase), OCT / TRANS, ROOT, SCALE, ARP, CHORD,
+  MORPH, los valores de EDIT, el cabezal y los PLAYHEADS extra, MUTATE, los punch-in que actúan sobre ella, los envíos;
+  en general el transporte, el tiempo, el compás, la sección, los macros y efectos de la capa FX, la curva del TAPE
+  STOP, el DJ FILTER, el delay, la reverb y el SLICER, el BPM; y eventos al momento (cada nota que arranca una pista,
+  los ratchets, MUTATE, los dados y GEN, el tiempo, PLAY / STOP, una sección, un punch-in que entra o sale, un sonido
+  cargado). **No sale nada hasta que la app se suscribe**, y para 3 s después del último pedido de la app, así cualquier
+  otro programa MIDI ve el FM-1 exactamente como antes; MIDI OUT y el editor web no cambian. OFF rechaza a la app (se
+  lo dice). Los valores van a 30 Hz (la app elige 1–60) solo cuando cambian; los eventos en la siguiente pasada del
+  loop de la pantalla; nada en la interrupción de audio. El protocolo y sus decodificadores:
+  [docs/VISFEED.md](VISFEED.md).
 - **No es posible**: MIDI OUT por el jack **TRS** (el jack del FM-1 es solo de entrada: no le llega ninguna línea de
   salida) ni **MIDI por Bluetooth** (el chip tiene radio, pero su software de Bluetooth es el SDK cerrado de JieLi,
   que JIANT no usa).

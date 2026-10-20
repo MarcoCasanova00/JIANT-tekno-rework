@@ -692,6 +692,26 @@ JIANT's modifications are distributed under the same license.
 
 Every update is listed here, newest first. (Since 0.6.80 at the end of the page: what the synth does comes first.)
 
+### v0.9.19 (in progress)
+- **VIS FEED** (MENU › MIDI › **VIS FEED**, KNOB 4; ON by default): the synth's state for the **JIANT Stems** app's
+  visuals, over USB-MIDI, so each track's picture can be driven by what the synth does and not only by its audio:
+  per track the engine, mute, the filter's CUT and RES **as heard** (LFO and ENV on them), the envelope's level and
+  stage, the voices sounding, the LFO's value, rate, wave and phase, the modulation sequence, OCT / TRANS (the punch-ins'
+  too), ROOT, SCALE, ARP (mode, rate, order, octaves, its step and note), CHORD (type, voicing, size), MORPH, the eight
+  EDIT values, the playhead and the three extra **PLAYHEADS**, LIVE's ghost, the ratchet to come, MUTATE, the punch-ins
+  acting on it, the sends, ATK DEC SUS REL; globally the transport, beat, bar, section and song row, the FX layer's
+  macros and sweeps, the glitcher's wet share, TAPE STOP's time and curve, the DJ FILTER, delay / reverb / SLICER /
+  PUNCH, BPM, which punch-in effects run; and events as they happen: every **note** a track starts (whoever played it),
+  **RATCH** / rolls, **MUTATE**, the dice and **GEN**, the beat, PLAY / STOP, the section, each punch-in on / off, a sound
+  loaded. **Nothing goes out until the app subscribes** (JIANT's own SysEx, `F0 7D 4A 56`), and it stops 3 s after the
+  app's last word: a DAW, a drum machine or a MIDI monitor never sees a byte of it, MIDI OUT and the editor are
+  untouched (their own queues, the feed never fills more than half of the SysEx one). Values at 30 Hz (the app picks
+  1–60) only when they change, with a keyframe every 250 ms; events on the next pass of the main loop (≤ 16 ms); never
+  in the audio interrupt (a note-on stores one word). ~2.5 KB/s with four busy tracks. The protocol and two decoders
+  (C, JavaScript): [docs/VISFEED.md](docs/VISFEED.md); `tests/visfeed_test.c` checks every field against the synth,
+  the rate, the budget and that MIDI OUT is packet for packet as before. (The web editor lists VIS FEED among the MENU
+  settings, id 25.)
+
 ### v0.9.18
 RATCH and ARP over the steps, the components regrouped, rolls that stay where they belong, COMP showing its step, and
 the BAR page gone; the LFO's MODE; the MENU as pages.
@@ -750,7 +770,7 @@ the BAR page gone; the LFO's MODE; the MENU as pages.
   | SCREEN | LEDS | LED GLOW | SCALE LEDS | — | — |
   | AUDIO | AUDIO | SPEAKER EQ | TRACKS | LOAD | BPM LOCK |
   | AUDIO | CLICK | CLICK | CLICK LEVEL | COUNT-IN | — |
-  | MIDI | MIDI | MIDI OUT | LEARN | LEARN CLEAR | — |
+  | MIDI | MIDI | MIDI OUT | LEARN | LEARN CLEAR | — (0.9.19: VIS FEED) |
   | USB | USB | USB AUDIO | USB LEVEL | — | — |
   | SYSTEM | CONTROLS | HOLD TIME | KNOB SPEEDUP | FX LATCH | CALIBRATION |
   | SYSTEM | SYSTEM | RESTORE LAST | CPU CORES | CPU CLOCK | ABOUT |

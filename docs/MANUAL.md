@@ -2126,6 +2126,7 @@ every setting, its values and its meaning: nothing changes in the saved settings
 | MIDI › MIDI | 1 | MIDI OUT | **KEYS**, CLOCK, ALL, OFF — what goes out over USB MIDI (see [14](#14-midi-and-usb)) |
 | | 2 | LEARN | **OFF**, ON — (0.9.12) arms MIDI LEARN: a knob turned picks its parameter, the next CC is learned to it (see [MIDI LEARN](#midi-learn-0912)); not saved, OFF at power-on |
 | | 3 | LEARN CLEAR | an action: the card shows how many CCs are learned (NONE, 3 CC …); KNOB 3 right arms it, OCT+ forgets them all |
+| | 4 | VIS FEED | **ON** (default), OFF — (0.9.19) the synth's state for the JIANT Stems app's visuals over USB-MIDI; sent only while the app asks for it (see [14](#14-midi-and-usb)) |
 | USB › USB | 1 | USB AUDIO | CONSOLE (the serial console with stereo USB audio, the default), STEREO (audio + MIDI only, class 0: helps macOS 13–15 see the USB audio input), STEMS (0.7.1: an 8-channel audio input, see "Stems" below), IN+OUT (0.7.5: stereo audio both ways, see "USB audio in" below), STEMS+IN (0.8.0: the stems with the audio output too, see "Stems with a voice" below) — was SYSTEM › USB; applied when the MENU closes |
 | | 2 | USB LEVEL | MASTER (USB follows the MASTER knob), FIXED (USB at full level), −6 / −12 / −18 / −24 dB (USB fixed and attenuated: for a phone or a computer whose input clips at the full level) |
 | SYSTEM › CONTROLS | 1 | HOLD TIME | 0.3 s, **0.4 s** (default), 0.5 s, 0.6 s — how long until a held button opens its layer (was HOLD) |
@@ -2185,6 +2186,17 @@ assumes the FM-1 is 1.6 times heavier than the estimate.
   ROUTE). Programs **0–3** jump to section **A–D** of the project (playing: on the next bar, as the song layer's keys;
   stopped: at once; an empty one is said so); programs **16–23** load project **1–8** with its section A (stopped only,
   as SAVE > SECTIONS). A foot controller or a DAW can run a set.
+- **VIS FEED** (0.9.19; MENU > MIDI > **VIS FEED**, ON by default): the synth's state for the **JIANT Stems** app's
+  visuals, over USB-MIDI in JIANT's own SysEx (`F0 7D 4A 56 …`): per track the engine, mute, the filter as heard, the
+  envelope, the voices, the LFO (value, rate, wave, phase), OCT / TRANS, ROOT, SCALE, ARP, CHORD, MORPH, the EDIT
+  values, the playhead and the extra PLAYHEADS, MUTATE, the punch-ins on it, the sends; globally the transport, beat,
+  bar, section, the FX layer's macros and effects, TAPE STOP's curve, the DJ FILTER, the delay, reverb and SLICER, BPM;
+  and events as they happen (every note a track starts, ratchets, MUTATE, the dice and GEN, the beat, PLAY / STOP, a
+  section, a punch-in on / off, a sound loaded). **Nothing is sent until the app subscribes**, and it stops 3 s after
+  the app's last request, so any other MIDI software sees the FM-1 exactly as before; MIDI OUT and the web editor are
+  untouched. OFF refuses the app (it is told so). Values go at 30 Hz (the app chooses 1–60) only when they change;
+  events on the next pass of the screen's loop; nothing in the audio interrupt. The protocol and its decoders:
+  [docs/VISFEED.md](VISFEED.md).
 - **Not possible**: MIDI OUT on the **TRS** jack (the FM-1's jack is an input only: no output line goes to it) and
   **Bluetooth MIDI** (the chip has a radio, but its Bluetooth software is JieLi's closed SDK, which JIANT does not use).
 - **Clock**: GLO > GLOBAL > CLOCK **USB** or **TRS** follows that input's clock and Start / Continue / Stop. With an

@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Juan Ignacio Antonucci (Juan Jiant) */
 /* (0.9.19) VIS FEED: the synth's state for the JIANT Stems app's visuals, over USB-MIDI (docs/VISFEED.md, the protocol:
  * version 1). Opt-in twice: MENU > MIDI > VIS FEED ON (the default) only allows it; nothing goes out until a host
- * subscribes with JIANT's own SysEx (F0 7D 4A 56 01 00 rate flags F7) and it lapses VF_SUB_MS after the host's last
+ * subscribes with JIANT's own SysEx (F0 7D 4A 56 01 00 seq 00 00 rate flags F7) and it lapses VF_SUB_MS after the host's last
  * one, so a DAW, a drum machine or a MIDI monitor never sees a byte of it.
  *   F0 7D 4A 56 ver type seq tlo thi payload F7     (ver 1; seq +1 a frame; t: fm1_ms & 0x3FFF, 7 bits each)
  * Out: HELLO (the answer to every SUB), BYE, STATE (records: a marker 0x70 + k picks track k, 0x77 the globals; then
@@ -21,11 +21,11 @@
 #define VF_KEY_MS 250u                                   /* a keyframe: one unit's whole state (7 units: ~1.75 s round) */
 #define VF_GAP_MS 4u                                     /* (passes closer than this: the main loop's waiting, nothing) */
 #define VF_FRAME 48u                                     /* bytes a frame, F0 .. F7: 16 USB-MIDI packets */
-#define VF_PASS 3u                                       /* frames a pass */
+#define VF_PASS 4u                                       /* frames a pass (a unit's whole state: 3) */
 #define VF_RATE 30u                                      /* the state's rate when the host asks none (Hz) */
-#define VF_T1 0x28u                                      /* a track's 1-byte fields (0x00 ..), 2-byte ones (0x40 ..) */
+#define VF_T1 0x30u                                      /* a track's 1-byte fields (0x00 ..), 2-byte ones (0x40 ..) */
 #define VF_T2 8u
-#define VF_G1 0x13u                                      /* the globals' */
+#define VF_G1 0x1Bu                                      /* the globals' */
 #define VF_G2 3u
 #define VF_TN (VF_T1 + VF_T2)
 #define VF_GN (VF_G1 + VF_G2)
@@ -52,6 +52,7 @@ static struct {
     int16_t *pp[VF_FRAME / 2u], pv[VF_FRAME / 2u];      /* a STATE frame's values, the host's once it has gone */
     uint32_t np;
     uint8_t fmask;                                       /* the units with records in the STATE frame being filled */
+    uint8_t ku, ki;                                      /* a unit cut short by the budget, the field it goes on from */
     uint32_t frames, bytes, lost;                        /* (the tests, the console) */
 } vf;
 
@@ -81,6 +82,7 @@ static int vf_send(void)
         vf.np = 0;                                       /* (what it held is sent again: still changed, due) */
         vf.due |= vf.fmask;
         vf.fmask = 0;
+        vf.ku = 0xFF;
         return -1;
     }
     vf_put(0xF7);
@@ -112,7 +114,8 @@ static uint32_t vf_gid(uint32_t i) { return i < VF_G1 ? i : 0x40u + (i - VF_G1);
 static const uint8_t VF_TP[VF_T1] = {
     0xFF, 0xFF, 0xFF, P_LEVEL, P_PAN, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, P_ROOT, P_SCALE, P_AMODE, P_ARATE, P_AORDER,
     P_AOCT, 0xFF, 0xFF, 0xFF, P_CVOI, 0xFF, 0xFF, 0xFF, P_SLEN, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, P_MAMT,
-    0xFF, P_DIST, P_CHOR, P_DLY, P_REV, 0xFF, 0xFF, 0xFF};
+    0xFF, P_DIST, P_CHOR, P_DLY, P_REV, 0xFF, 0xFF, 0xFF,
+    0xFF, P_LWAVE, 0xFF, 0xFF, P_ATK, P_DEC, P_SUS, P_REL};   /* (the reply to the app: the LFO, MS, the envelope's times) */
 /* track k's fields as they are now, in v[] (field index order: VF_T1 one-byte ids, then the two-byte ones) */
 static void vf_track(uint32_t k, int16_t *v, uint32_t mut)
 {
@@ -165,6 +168,9 @@ static void vf_track(uint32_t k, int16_t *v, uint32_t mut)
     s = &seq_steps(t)[seq_src(t, t->seq_idx < NSTEP ? t->seq_idx : 0u)];
     v[0x26] = (int16_t)(s->comp & 127u);
     v[0x27] = (int16_t)(s->comp2 & 127u);
+    v[0x28] = (int16_t)vf_c7(t->p[P_LRATE] + 12);     /* 0..11 in time (4BAR .. 1/32), 12 + the knob's free rate */
+    v[0x2A] = (int16_t)(t->lfo_ph >> 25);              /* the LFO's phase now, 0..127 a cycle (phase-locking) */
+    v[0x2B] = (int16_t)vf_c7(64 + (t->ms_v >> 9));     /* the modulation sequence's level now */
 }
 static uint32_t vf_fxon(void) { return (perf_act | (pfx_qon & PF_MIDI)) & 0x0FFFFFFFu; }
 static void vf_global(int16_t *v)
@@ -188,6 +194,14 @@ static void vf_global(int16_t *v)
     v[0x10] = pfx_tgt;
     v[0x11] = (int16_t)(lv.act & 127u);
     v[0x12] = (int16_t)vf_c7((int32_t)(song.cpu_q8 * 100u >> 8));
+    v[0x13] = (int16_t)vf_c7(perf_gp[GX_TAPE][1]);     /* TAPE STOP's TIME (0..4: 1/64 .. 1/4) and CURVE + 64 */
+    v[0x14] = (int16_t)vf_c7(perf_gp[GX_TAPE][2] + 64);
+    v[0x15] = (int16_t)vf_c7(song.g[G_DMIX]);
+    v[0x16] = (int16_t)vf_c7(song.g[G_DFDBK]);
+    v[0x17] = (int16_t)vf_c7(song.g[G_RSIZE]);
+    v[0x18] = (int16_t)vf_c7(song.g[G_SLMODE]);
+    v[0x19] = (int16_t)vf_c7(song.g[G_SLDEP]);
+    v[0x1A] = (int16_t)vf_c7(song.g[G_PUNCH]);
     v[VF_G1 + 0] = (int16_t)(b ? (uint32_t)FS * 600u / b : 0u);   /* BPM x 10, as heard */
     v[VF_G1 + 1] = (int16_t)(fx & 0x3FFFu);             /* (PF bits 0..13, 14..27) */
     v[VF_G1 + 2] = (int16_t)(fx >> 14);
@@ -201,7 +215,7 @@ static int vf_unit(uint32_t u, uint32_t mut, int *open)
     uint32_t i, nf = u < NTRK ? VF_TN : VF_GN, keyed = (vf.keyed >> u) & 1u, marked = 0;
     if (u < NTRK) vf_track(u, cur, mut);
     else vf_global(cur);
-    for (i = 0; i < nf; i++) {
+    for (i = vf.ku == u ? vf.ki : 0u; i < nf; i++) {    /* (cut short last pass: on from where it was) */
         uint32_t id = u < NTRK ? vf_tid(i) : vf_gid(i), w = id >= 0x40u ? 3u : 2u;
         if (!keyed && cur[i] == had[i])
             continue;
@@ -211,8 +225,11 @@ static int vf_unit(uint32_t u, uint32_t mut, int *open)
             *open = 0;
         }
         if (!*open) {
-            if (!vf.pass_left)
+            if (!vf.pass_left) {
+                vf.ku = (uint8_t)u;
+                vf.ki = (uint8_t)i;
                 return -1;
+            }
             vf_begin(VFT_STATE);
             *open = 1;
             marked = 0;
@@ -234,6 +251,7 @@ static int vf_unit(uint32_t u, uint32_t mut, int *open)
         vf.pv[vf.np++] = cur[i];
     }
     vf.keyed &= (uint8_t)~(1u << u);
+    vf.ku = 0xFF;
     return 0;
 }
 
@@ -348,6 +366,7 @@ static void vf_start(void)                               /* subscribed (again): 
     for (i = 0; i < VF_GN; i++)
         vf.gv[i] = VF_NONE;
     vf.keyed = 0;
+    vf.ku = 0xFF;
     vf.due = (uint8_t)((1u << (NTRK + 1u)) - 1u);
     vf.st_ms = vf.key_ms = fm1_ms;
     vf.nev = 0;
@@ -359,9 +378,9 @@ static int vf_rx(const uint8_t *p, uint32_t n)
 {
     if (n < 5u || p[0] != 0x7Du || p[1] != VF_ID1 || p[2] != VF_ID2)
         return 0;
-    if (p[3] >= 1u && p[4] == VFT_SUB) {
-        uint32_t rate = n > 5u ? p[5] : VF_RATE, was = vf.sub;
-        vf.flags = (uint8_t)(n > 6u && (p[6] & 15u) ? p[6] & 15u : 15u);
+    if (p[3] >= 1u && p[4] == VFT_SUB) {                 /* (its header as ours: seq tlo thi, then rate, flags) */
+        uint32_t rate = n > 8u ? p[8] : VF_RATE, was = vf.sub;
+        vf.flags = (uint8_t)(n > 9u && (p[9] & 15u) ? p[9] & 15u : 15u);
         vf.rate = (uint8_t)(rate > 60u ? 60u : rate);
         vf.sub = (uint8_t)(rate && !vis_feed_off);
         vf.sub_ms = fm1_ms;

@@ -37,15 +37,18 @@ static void vfd_init(vfd_t *d)
     }
     d->seq = -1;
 }
-/* the subscription a host sends (and again every second): F0 7D 4A 56 01 00 rate flags F7; rate 0 unsubscribes */
-static uint32_t vfd_sub(uint8_t *out, uint32_t rate, uint32_t flags)
+/* the subscription a host sends (and again every second): F0 7D 4A 56 01 00 seq 00 00 rate flags F7 (the frame header
+ * both ways: the host's seq counts its SUBs, its timestamp 0); rate 0 unsubscribes */
+static uint32_t vfd_sub(uint8_t *out, uint32_t seq, uint32_t rate, uint32_t flags)
 {
     static const uint8_t H[6] = {0xF0, 0x7D, 0x4A, 0x56, 1, 0};
     memcpy(out, H, 6);
-    out[6] = (uint8_t)(rate & 127u);
-    out[7] = (uint8_t)(flags & 127u);
-    out[8] = 0xF7;
-    return 9;
+    out[6] = (uint8_t)(seq & 127u);
+    out[7] = out[8] = 0;
+    out[9] = (uint8_t)(rate & 127u);
+    out[10] = (uint8_t)(flags & 127u);
+    out[11] = 0xF7;
+    return 12;
 }
 /* one SysEx message, F0 .. F7. 1: a VIS FEED frame (decoded), 0: someone else's, -1: malformed */
 static int vfd_sysex(vfd_t *d, const uint8_t *f, uint32_t n)

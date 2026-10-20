@@ -29,6 +29,7 @@ static uint8_t cap[1u << 20];
 static uint32_t cap_n;
 static uint32_t mo_log[4096], mo_n;
 static int drain_on = 1, verbose = 1;
+static uint32_t tot[3];                                  /* frames, events, records of the whole stream captured */
 
 static void on_ev(void *ctx, const vfd_event_t *e)
 {
@@ -56,8 +57,9 @@ static void vdrain(void)                                 /* the app reading EP 0
 }
 static void vsub(uint32_t rate, uint32_t flags)
 {
-    uint8_t m[9];
-    uint32_t i, n = vfd_sub(m, rate, flags);
+    static uint32_t seq;
+    uint8_t m[12];
+    uint32_t i, n = vfd_sub(m, seq++, rate, flags);
     for (i = 0; i < n; i++) sysex_byte(m[i]);
 }
 /* the music for ms: audio blocks, a main-loop pass every 16 ms (VIS FEED's), the app reading after each */
@@ -92,6 +94,7 @@ static void vreset(void)
 {
     reset();
     memset(&vf, 0, sizeof vf); memset(&vf_q, 0, sizeof vf_q);
+    tot[0] += D.frames; tot[1] += D.events; tot[2] += D.records;
     vfd_init(&D); D.on_event = on_ev;
     memset(ev_n, 0, sizeof ev_n);
     pk_max = ring_max = 0; mo_n = 0; mo_r = mo_w = 0; drain_on = 1;
@@ -243,7 +246,7 @@ int main(void)
              ev_n[VFE_BEAT][7] >= 15u && ev_n[VFE_BEAT][7] <= 17u;
         bad += vcheck("TRANSPORT PLAY once; a BEAT event every beat (16 in 8 s at 120)", ok);
         ok = pk_max <= VF_PASS * 16u && ring_max <= SXQ / 2u + 16u && D.lost == 0u && D.bad == 0u;
-        bad += vcheck("a pass: at most 3 frames of 16 packets, the ring at most half full + a frame, no seq gap", ok);
+        bad += vcheck("a pass: at most 4 frames of 16 packets, the ring at most half full + a frame, no seq gap", ok);
         (void)frames_state; (void)st_frames;
     }
     /* 5. events: MUTATE, DICE, GEN (marked by the main loop), FX, SECTION, SOUND, RATCH, ROLL, STOP */
@@ -349,7 +352,7 @@ int main(void)
             s0 = now_ns(); CALLGRIND_TOGGLE_COLLECT; vf_worst(); CALLGRIND_TOGGLE_COLLECT; t += now_ns() - s0; n++;
             vdrain();
         }
-        printf("visfeed: the worst pass (every field of every unit, 3 frames) %.2f us on the host\n",
+        printf("visfeed: the worst pass (every field of every unit, 4 frames) %.2f us on the host\n",
                (double)t / (double)n / 1000.0);
     }
     {   /* the stream for web/visfeed_test.mjs and what this decoder made of it */
@@ -357,7 +360,8 @@ int main(void)
         if (f) { fwrite(cap, 1, cap_n, f); fclose(f); }
         f = fopen("build/host/visfeed.json", "w");
         if (f) {
-            fprintf(f, "{\"frames\":%u,\"events\":%u,\"records\":%u,\"trk\":[", D.frames, D.events, D.records);
+            fprintf(f, "{\"frames\":%u,\"events\":%u,\"records\":%u,\"trk\":[", tot[0] + D.frames, tot[1] + D.events,
+                    tot[2] + D.records);
             for (k = 0; k < NTRK; k++) {
                 fprintf(f, "%s[", k ? "," : "");
                 for (i = 0; i < 0x70u; i++) fprintf(f, "%s%d", i ? "," : "", D.trk[k][i] == VFD_UNSET ? -1 : D.trk[k][i]);
