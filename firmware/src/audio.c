@@ -108,7 +108,6 @@ static void audio_block(int32_t *out, uint32_t n)       /* mix (fx.c), then Q15 
 static volatile uint8_t shed_req;
 static uint8_t shed_over;                              /* bit k: the half k halves ago was over 80 % */
 #define SHED_TICKS ((HALF_FRAMES * 1000000u / FS) * 80u / 100u * FM1_TICKS_PER_US)   /* 80 % of a half */
-static uint32_t shed_count;
 
 /* end of a half: all = its ticks, TIMER5 nested in it included -> the render alone in us. The deadline sees
  * both; shed after 2 overloaded halves in a row (out of line: keeps the ISR's render loops as they were) */
@@ -133,33 +132,6 @@ static uint8_t tight_calm;                             /* halves in a row under 
 #define GOV_HOT ((HALF_FRAMES * 1000000u / FS) * 75u / 100u * FM1_TICKS_PER_US)
 #define GOV_HOT_ECO ((HALF_FRAMES * 1000000u / FS) * 62u / 100u * FM1_TICKS_PER_US)
 #define GOV_HOT_1C ((HALF_FRAMES * 1000000u / FS) * 70u / 100u * FM1_TICKS_PER_US)
-static uint16_t gov_hot, gov_calm, gov_win, gov_lcalm;
-static uint8_t gov_sheds, gov_floor;
-static void gov_tick(int over, int hot, int under, int shed)
-{
-    uint32_t c = gov_cap > NVOICE + 4u ? NVOICE + 4u : gov_cap;
-    if (shed) {
-        c = c > 6u ? c - 2u : 4u;
-        if (!gov_win) gov_sheds = 0;
-        gov_win = 344u;
-        if (++gov_sheds >= 2u) { gov_lite = LOAD_LITE; gov_lcalm = 0; }
-    }
-    if (gov_win) gov_win--;
-    gov_floor = hot ? gov_floor : 0;
-    if (over || hot) {
-        gov_calm = 0;
-        if (hot || ++gov_hot >= 3u) {
-            gov_hot = 0;
-            if (c > 4u) c--;
-            else if (hot && ++gov_floor >= 8u) { gov_lite = LOAD_LITE; gov_lcalm = 0; }
-        }
-    } else {
-        gov_hot = 0;
-        if (under && ++gov_calm >= 172u) { gov_calm = 0; if (c < NVOICE + 4u) c++; }
-    }
-    if (gov_lite && (under ? ++gov_lcalm >= 1720u : (gov_lcalm = 0, 0))) gov_lite = 0;
-    gov_cap = (uint8_t)c;
-}
 static __attribute__((noinline)) uint32_t shed_check(uint32_t all)
 {
     uint32_t r = all - t5_nested_ticks;                /* (0.6.19) the budget on the render alone: a key scan or
@@ -178,39 +150,6 @@ static __attribute__((noinline)) uint32_t shed_check(uint32_t all)
     gov_tick(r > (eco ? TIGHT_ON_ECO : one ? TIGHT_ON_1C : TIGHT_ON), r > (eco ? GOV_HOT_ECO : one ? GOV_HOT_1C : GOV_HOT),
              r < (eco ? TIGHT_OFF_ECO : one ? TIGHT_OFF_1C : TIGHT_OFF), shed_req);
     return (all - t5_nested_ticks) / FM1_TICKS_PER_US;
-}
-
-static void shed_voice(void)
-{
-    uint32_t p, i;
-    voice_t *best = 0;
-    for (p = 0; p < NPART; p++)
-        for (i = 0; i < NVOICE; i++) {
-            voice_t *v = &trk[p].v[i];
-            if (v->active && !v->gate && v->stage != 4u && (!best || v->env < best->env))
-                best = v;
-        }
-    if (best) {
-        voice_kill(best);
-        shed_count++;
-        return;
-    }
-    for (p = 0; p < NPART; p++) {
-        const track_t *t = &trk[p];
-        uint32_t mode = trk_vmode(t), low = mode == V_POLY ? lowest_held(t) : 0u;
-        for (i = 0; i < NVOICE; i++) {
-            voice_t *v = &trk[p].v[i];
-            if (v->active && v->gate && v->stage != 4u &&
-                ((mode == V_POLY && i != low) || (mode != V_POLY && i > 0u))) {
-                if (!best || v->age < best->age)
-                    best = v;
-            }
-        }
-    }
-    if (best) {
-        voice_kill(best);
-        shed_count++;
-    }
 }
 
 void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) */
