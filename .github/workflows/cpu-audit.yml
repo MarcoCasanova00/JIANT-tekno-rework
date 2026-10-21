@@ -2,12 +2,12 @@
 name: 0.9.9 CPU and RAM audit
 on:
   push:
-    branches: [codex/fm1-v099-cpu5]
+    branches: [codex/fm1-v099-wheel-idle]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: firmware-cpu5-audit
+  group: firmware-wheel-idle-audit
   cancel-in-progress: true
 jobs:
   build:
@@ -17,6 +17,8 @@ jobs:
       JIELI_TOOLCHAIN: /home/runner/.jieli/toolchain
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -53,6 +55,13 @@ jobs:
           for suite in fm6_env_compare fm6_test voice_test audio_test voice_fairness_test regress; do
             cc -O2 -w -Ibuild/gen -Ifirmware/src "tests/$suite.c" -lm -o "build/host/$suite"
           done
+          mkdir -p /tmp/wheel-reference/tests
+          cp -r firmware /tmp/wheel-reference/firmware
+          cp tests/hostsim.c tests/wheel_idle_test.c /tmp/wheel-reference/tests/
+          git show 009faf97764cf872fd5f392155d944a684127132:firmware/src/eng_wheel.c > /tmp/wheel-reference/firmware/src/eng_wheel.c
+          cc -O2 -w -Ibuild/gen -Ifirmware/src tests/wheel_idle_test.c -lm -o build/host/wheel_idle_test
+          cc -O2 -w -Ibuild/gen -I/tmp/wheel-reference/firmware/src /tmp/wheel-reference/tests/wheel_idle_test.c -lm -o build/host/wheel_idle_reference
+          python3 tests/wheel_idle_test.py build/host/wheel_idle_reference build/host/wheel_idle_test
           cc -O2 -w -Ibuild/gen -Ifirmware/src tests/chorus_sleep_test.c -lm -o build/host/chorus_sleep_test
           python3 tests/chorus_sleep_test.py build/host/chorus_sleep_test
           cc -O2 -w -Ibuild/gen -Ifirmware/src tests/empty_fx_test.c -lm -o build/host/empty_fx_test
@@ -81,7 +90,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > build/SOURCE_COMMIT
       - uses: actions/upload-artifact@v4
         with:
-          name: fm1-v099-cpu5-audit
+          name: fm1-v099-wheel-idle-audit
           if-no-files-found: error
           path: |
             build/felucca.fwsc

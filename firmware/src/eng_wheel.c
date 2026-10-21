@@ -167,27 +167,33 @@ static void wheel_block(track_t *t)
     const int16_t *p = t->p;
     uint32_t k, perc = (uint32_t)p[P_E4] % 7u, rot = (uint32_t)p[P_E7] % 3u;
     int32_t s = 0, lv[DRW_NP], rdep = clamp(p[P_WRDEP], 0, 127) + 1;   /* (0.7.8) ROTOR > DEPTH, Q7: 127 = as before */
-    uint32_t norm;
-    for (k = 0; k < DRW_NP; k++) {
-        lv[k] = perc && k == DRW_NP - 1u ? 0 : DRW_LV[drw_level(p, k)];   /* PERC on: the 1' bar is off */
-        s += lv[k];
-    }
-    /* sum of the gains = 2.4 s / (s + 1.5) (s in units of a full bar): one bar 0.96, three 1.6,
-     * all nine 2.06 */
-    norm = (uint32_t)(2u * 39322u * 32768u) / (uint32_t)(s + 49152);
-    if (perc == 1u || perc == 2u || perc == 5u || perc == 6u)
-        norm = (norm * 23170u) >> 15;                   /* normal percussion: the bars -3 dB */
-    for (k = 0; k < DRW_NP; k++)
-        T->g[k] = (int32_t)(((uint32_t)lv[k] * norm) >> 15);
-    T->pk = perc ? (int32_t)(3u + ((perc - 1u) & 1u)) : DRW_NP;   /* 2ND: 4', 3RD: 2 2/3' */
-    T->plev = perc == 3u || perc == 4u ? 12000 : 24000;
-    T->pdec = perc >= 5u ? 65457u : 65219u;             /* tau 0.6 s / 0.15 s */
-    T->clk = p[P_E5] * 180;
-    if (p[P_E6]) {                                      /* y = 6 / (2 + g) tanh(g x / 2) */
-        T->dg = 256 + p[P_E6] * 6;                      /* 1 .. 4 */
-        T->dcomp = (6 * 256 * 256) / (512 + T->dg);
-    } else {
-        T->dg = 0;
+    uint32_t norm, live = 0;
+    for (k = 0; k < NVOICE; k++)
+        if (t->v[k].active) { live = 1; break; }
+    /* Static gains are only consumed by a sounding voice. A new note rebuilds
+     * them before rendering; rotor inertia and phase keep advancing in silence. */
+    if (live) {
+        for (k = 0; k < DRW_NP; k++) {
+            lv[k] = perc && k == DRW_NP - 1u ? 0 : DRW_LV[drw_level(p, k)];   /* PERC on: the 1' bar is off */
+            s += lv[k];
+        }
+        /* sum of the gains = 2.4 s / (s + 1.5) (s in units of a full bar): one bar 0.96, three 1.6,
+         * all nine 2.06 */
+        norm = (uint32_t)(2u * 39322u * 32768u) / (uint32_t)(s + 49152);
+        if (perc == 1u || perc == 2u || perc == 5u || perc == 6u)
+            norm = (norm * 23170u) >> 15;                   /* normal percussion: the bars -3 dB */
+        for (k = 0; k < DRW_NP; k++)
+            T->g[k] = (int32_t)(((uint32_t)lv[k] * norm) >> 15);
+        T->pk = perc ? (int32_t)(3u + ((perc - 1u) & 1u)) : DRW_NP;   /* 2ND: 4', 3RD: 2 2/3' */
+        T->plev = perc == 3u || perc == 4u ? 12000 : 24000;
+        T->pdec = perc >= 5u ? 65457u : 65219u;             /* tau 0.6 s / 0.15 s */
+        T->clk = p[P_E5] * 180;
+        if (p[P_E6]) {                                      /* y = 6 / (2 + g) tanh(g x / 2) */
+            T->dg = 256 + p[P_E6] * 6;                      /* 1 .. 4 */
+            T->dcomp = (6 * 256 * 256) / (512 + T->dg);
+        } else {
+            T->dg = 0;
+        }
     }
     /* rotors: each speed eases to its target (high rotor tau ~0.37 s, low ~1.5 s) */
     for (k = 0; k < 2u; k++) {
@@ -195,6 +201,7 @@ static void wheel_block(track_t *t)
         T->rsp[k] += (DRW_ROT_SPD[k][rot] - T->rsp[k]) >> (k ? 11 : 9);
         sp = T->rsp[k];
         T->rph[k] += (uint32_t)sp;
+        if (!live) continue;
         sn = sine_i(T->rph[k]);
         c = sine_i(T->rph[k] + 0x40000000u);
         dep = ((k ? 7000 : 13000) * rdep) >> 7;         /* AM depth: low rotor 21 %, high 40 % (at DEPTH 100 %) */
@@ -207,7 +214,7 @@ static void wheel_block(track_t *t)
     T->dust = 127 - clamp(p[P_WDUST], 0, 127);          /* (0.7.8) DUST, 127 stored = 0 %: on the first sounding voice */
     if (T->dust)
         drw_dust_pick(t, T);
-    for (k = 0; k < 2u; k++) {
+    if (live) for (k = 0; k < 2u; k++) {
         T->am[k] = 32767 - mulq15(T->rwet, 32767 - T->am[k]);
         T->fm[k] = mulq15(T->fm[k], T->rwet);
     }
