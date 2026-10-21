@@ -130,17 +130,16 @@ static __attribute__((noinline)) int32_t drw_level(const int16_t *p, uint32_t k)
 }
 
 /* (0.7.8) DUST: the voice that carries it this block (the part's first sounding one; NVOICE none) */
-static __attribute__((noinline)) void drw_dust_pick(const track_t *t, drw_trk_t *T)
+static __attribute__((noinline)) uint32_t drw_dust_pick(const track_t *t, drw_trk_t *T)
 {
     uint32_t k;
-    T->dvi = NVOICE;
     for (k = 0; k < NVOICE; k++)
-        if (t->v[k].active) {
-            T->dvi = k;
-            break;
-        }
-    if (!T->dnz)
-        T->dnz = 0x2545F491;
+        if (t->v[k].active) break;
+    if (T->dust) {
+        T->dvi = k;
+        if (!T->dnz) T->dnz = 0x2545F491;
+    }
+    return k < NVOICE;
 }
 /* .. its crackle and hiss into the voice's block */
 static __attribute__((noinline)) void drw_dust(drw_trk_t *W, int32_t *acc, uint32_t n)
@@ -167,9 +166,9 @@ static void wheel_block(track_t *t)
     const int16_t *p = t->p;
     uint32_t k, perc = (uint32_t)p[P_E4] % 7u, rot = (uint32_t)p[P_E7] % 3u;
     int32_t s = 0, lv[DRW_NP], rdep = clamp(p[P_WRDEP], 0, 127) + 1;   /* (0.7.8) ROTOR > DEPTH, Q7: 127 = as before */
-    uint32_t norm, live = 0;
-    for (k = 0; k < NVOICE; k++)
-        if (t->v[k].active) { live = 1; break; }
+    uint32_t norm, live;
+    T->dust = 127 - clamp(p[P_WDUST], 0, 127);
+    live = drw_dust_pick(t, T); /* one shared scan for silence and the dust carrier */
     /* Static gains are only consumed by a sounding voice. A new note rebuilds
      * them before rendering; rotor inertia and phase keep advancing in silence. */
     if (live) {
@@ -211,9 +210,6 @@ static void wheel_block(track_t *t)
             T->fm[k] = (T->fm[k] * rdep) >> 7;
     }
     T->rwet += ((rot ? 32767 : 0) - T->rwet) >> 5;      /* ~25 ms in or out */
-    T->dust = 127 - clamp(p[P_WDUST], 0, 127);          /* (0.7.8) DUST, 127 stored = 0 %: on the first sounding voice */
-    if (T->dust)
-        drw_dust_pick(t, T);
     if (live) for (k = 0; k < 2u; k++) {
         T->am[k] = 32767 - mulq15(T->rwet, 32767 - T->am[k]);
         T->fm[k] = mulq15(T->fm[k], T->rwet);
