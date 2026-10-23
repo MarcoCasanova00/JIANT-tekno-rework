@@ -1,4 +1,5 @@
-﻿# Tekno FM-1 Jiant Rework
+﻿![Logo](logologo.png)
+# Tekno FM-1 Jiant Rework
 
 > **A small patch for JIANT FM** — six techno-family genres replacing generic world/jazz/hip-hop slots.
 
