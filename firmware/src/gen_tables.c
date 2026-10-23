@@ -366,7 +366,7 @@ static const grecipe_t RECIPE[SR_N] = {
      * tekno: a straight, resonant sixteenth-note bass. Their preset words are the named ANALOG/FM6 patches below. */
     [SR_TRIBE_BASS] = {{EG_A, EG_A, EG_A}, {"TRIBE BASS", "FAT BASS", "FB BASS"}, {0, 1}, {48, 70}, {35, 55}, {18, 30}, 0, {46, 64}, {35, 65}, {35, 55}, {0, 0}, {0, 0}, {8, 22}, {0, 0}, 0, V_LEGATO},
     [SR_MENTAL_BASS] = {{EG_FM, EG_A, EG_PH}, {"FM BASS", "MENTAL RING", "FB BASS"}, {0, 1}, {35, 55}, {25, 45}, {20, 35}, 0, {42, 60}, {45, 75}, {20, 40}, {3, 10}, {10, 30}, {8, 18}, {0, 5}, 8, V_LEGATO},
-    [SR_MENTAL]   = {{EG_FM, EG_A, EG_PH}, {"ICE BELL", "WIRE", "MENTAL RING"}, {0, 2}, {40, 65}, {10, 35}, {35, 60}, 0, {50, 72}, {35, 70}, {15, 35}, {6, 18}, {10, 35}, {0, 8}, {8, 20}, 0, V_POLY},
+    [SR_MENTAL]   = {{EG_A, EG_FM, EG_PH}, {"MENTAL SIREN", "MENTAL RING", "ICE BELL"}, {15, 30}, {50, 75}, {60, 90}, {40, 70}, 0, {50, 72}, {40, 70}, {20, 45}, {10, 25}, {15, 40}, {0, 15}, {15, 35}, 30, V_POLY},
     [SR_ACIDCORE] = {{EG_A, EG_A, EG_PH}, {"CORE 303", "RESO", "FM PLUCK"}, {0, 1}, {30, 50}, {5, 25}, {18, 32}, 0, {28, 50}, {70, 90}, {48, 64}, {0, 0}, {0, 0}, {30, 60}, {0, 0}, 35, V_LEGATO},
     [SR_TEKK_BASS] = {{EG_A, EG_A, EG_A}, {"TEKK BASS", "HARD BASS", "GROWL"}, {0, 1}, {40, 60}, {20, 40}, {15, 28}, 0, {34, 54}, {25, 55}, {30, 55}, {0, 0}, {0, 0}, {45, 75}, {0, 0}, 0, V_LEGATO},
     [SR_TEKK_STAB] = {{EG_A, EG_A, EG_PH}, {"TEKK STAB", "HOOVER", "DIGI STAB"}, {0, 4}, {25, 45}, {10, 30}, {20, 40}, 0, {55, 78}, {20, 45}, {10, 30}, {0, 0}, {0, 0}, {25, 50}, {20, 45}, 0, V_POLY},

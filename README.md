@@ -1,14 +1,30 @@
-﻿# JIANT FM tekno rework
+﻿# Tekno FM-1 Jiant Rework
 
-**Modified JIANT with six new techno-family genres for M-VAVE FM-1**
+> **A small patch for JIANT FM** — six techno-family genres replacing generic world/jazz/hip-hop slots.
 
-## What Changed
-- Replaced BROKEN, AFROBEAT, BOSSA, JAZZ, BOOM BAP, STEPPERS with TRIBE TEKNO, MENTAL TEKNO, ACID CORE, HARDTEKK, TEKNO, PSY TRANCE
-- All original 43 genres preserved (PSY TRANCE in slot 42)
-- Added 11 new recipes and 8 playable ANALOG presets designed for tribe, mental, acidcore, hardtekk, and psytrance
+**Based on**: [JIANT FM](https://github.com/juanjiant-bit/JIANT) v0.9.18  
+**Patch by**: MarcoCasanova00  
+**Original authors**: Juan Jiant (Juan Ignacio Antonucci), Hügelton Instruments (Felucca)
+
+## What Changed (Replaced)
+| Removed (original) | Replaced with |
+|--------------------|---------------|
+| BROKEN | PSY TRANCE |
+| AFROBEAT | TEKNO |
+| BOSSA | MENTAL TEKNO |
+| JAZZ | ACID CORE |
+| BOOM BAP | HARDTEKK |
+| STEPPERS | TRIBE TEKNO |
+
+All original 43-genre count preserved — each new genre occupies a slot vacated by the removed ones. PSY TRANCE sits in the old BROKEN slot (42), so genre indices 0–42 remain stable.
+
+- **11 new generator recipes** tuned for techno tempos, kick/bass interaction, accent displacement, and polymeter
+- **8 new playable ANALOG presets**: TRIBE BASS, TEKK BASS, PSY BASS, CORE 303, TEKK STAB, PSY LEAD, TEKNO BASS, MENTAL RING
+- **6 new drum maps** with genre-specific kick patterns, hi-hats, percussion
+- **6 new bass archetypes** designed against the new kick rules
 
 ## Try It
-- **Browser Emulator**: https://MarcoCasanova00.github.io/JIANT-tekno-rework/emu/
+- **Browser Emulator**: https://MarcoCasanova00.github.io/JIANT/emu/
 - **How to Publish on GitHub Pages**: see [README-PAGES.md](README-PAGES.md) for step-by-step setup instructions.
 
 ## How Genre Generation Works
@@ -28,3 +44,7 @@
 
 ## License
 GPL-3.0-only
+
+This is a patch/modification of the original JIANT FM project. The underlying firmware is © 2026 Juan Ignacio Antonucci (Juan Jiant), based on Felucca 1.1.5.1 by Hügelton Instruments. This patch contains the original license and copyright notices.
+
+**Attribution**: This patch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. Use at your own risk on hardware.

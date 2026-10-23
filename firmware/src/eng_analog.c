@@ -269,7 +269,7 @@ static const preset_t ANALOG_PRESETS[] = {
     {"MOOG LEAD", {2, 6, 40, 0, 72, 40, 40, -12}, {6, 75, 100, 45}, 25, 1 | TAG(LEAD), FX(10, 0, 35, 25), PAT(4)},
     {"DARK PAD", {0, 18, 64, 6, 38, 30, 10, -12}, {70, 95, 120, 100}, 12, TAG(PAD), FX(0, 55, 30, 75), PAT(5)},
     {"GLASS KEYS", {3, 8, 60, 0, 120, 0, 0, 19}, {0, 82, 20, 65}, 0, TAG(KEYS), FX(0, 35, 35, 50), PAT(6)},
-    {"ORGAN SQR", {1, 4, 64, 0, 100, 0, 5, 12}, {0, 64, 127, 30}, 0, TAG(KEYS), FX(0, 35, 10, 35), PAT(6)},
+    {"MENTAL SIREN", {7, 45, 70, 0, 68, 65, 25, 7}, {15, 80, 110, 65}, 35, 1 | TAG(LEAD), FX(20, 30, 60, 50), PAT(4)},
     /* (the tekno family: playable patches too, not only generator recipes. TRIBE: a plucky square; TEKK: SAW3
      * through drive; PSY: a sustained saw; CORE 303: a resonant saw lead; TEKK STAB: a driven chord; PSY LEAD: a
      * delayed saw; TEKNO: a straight bass; MENTAL RING: RING's inharmonic metal) */
