@@ -1,4 +1,4 @@
-# JIANT FM - Techno Family Fork
+# JIANT FM tekno rework
 
 **Modified JIANT with six new techno-family genres**
 
