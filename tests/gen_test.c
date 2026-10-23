@@ -647,6 +647,7 @@ int main(void)
                peak_max, vmax_all, vref);
         bad += gcheck("  60 seeds: each named EXPLORE nnnn, each another piece (no two the same)", !name_bad && !same);
         bad += gcheck("  each plays: two melodic parts at least, sound (RMS), never stuck at full scale", !nmel_bad && !quiet && !loud);
+        bad += gcheck("  the budgets: FM6 / ANIMAL / VOICE on two tracks at most, one DRUM track, no more voices than a genre's",
                       !budget_bad && vmax_all <= vref);
         bad += gcheck("  the SCALE page its key on every track (a mode of seven, QUANT on); the CHORD page in-scale, its chords in the key",
                       !page_bad && !chord_bad);
