@@ -26,7 +26,7 @@ All original 43-genre count preserved — each new genre occupies a slot vacated
 
 ## Try It
 - **Browser Emulator**: [https://MarcoCasanova00.github.io/JIANT/emu/](https://marcocasanova00.github.io/JIANT-tekno-rework/)
-- **How to Publish on GitHub Pages**: see [README-PAGES.md](README-PAGES.md) for step-by-step setup instructions.
+
 
 ## How Genre Generation Works
 1. Navigate to the generator: on HOME, tap **HOME** to cycle groups to **GEN 1**, or hold **HOME** and turn **SELECT**.
