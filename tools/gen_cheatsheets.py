@@ -107,7 +107,7 @@ def page(title, sub, body, name):
 <style>{CSS}</style></head><body>
 <header><img src="signature.png" alt="JIANT FM signature"><div>
 <h1>JIANT FM · {e(title)}</h1><h2>{e(sub)}</h2>
-<div class="ver">firmware {VERSION} · M-VAVE FM-1 · juanjiant-bit.github.io/JIANT</div></div></header>
+<div class="ver">firmware {VERSION} · M-VAVE FM-1 · MarcoCasanova00.github.io/JIANT</div></div></header>
 <div class="rule"></div>
 {body}
 <footer><span>GPL-3.0 · fork of Felucca (Hügelton Instruments) · song mode from SLOOP</span>

@@ -129,7 +129,7 @@ for s0, s1, tg, ti, su, kd in SCENES:
     GRIDS.append((s0, s1, text_layer(ti, font('Bold', 60), TXT), cells))
 OUT_L = [text_layer(['JIANT FM'], font('Bold', 124), TXT),
          text_layer(['try it in your browser'], font('SemiBold', 40), TXT),
-         text_layer(['juanjiant-bit.github.io/JIANT'], font('Medium', 34), heat(0.62)),
+         text_layer(['MarcoCasanova00.github.io/JIANT'], font('Medium', 34), heat(0.62)),
          text_layer(['emulator · web installer · editor · cheat sheets'], font('Medium', 24), MID),
          text_layer(['support: ko-fi.com/juanjiant · cafecito.app/juanjiant'], font('Medium', 24), heat(0.3))]
 

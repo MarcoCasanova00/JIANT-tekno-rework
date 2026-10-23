@@ -154,7 +154,7 @@ static void at_beat(uint32_t q)
     }
     if (q == B(39, 2)) {
         caption(q, "USB", "STEMS FROM|THE BROWSER", "load your backup into the web emulator|each track alone with its effects, plus the MIX|a ZIP of WAVs, faster than real time", 0,
-                "juanjiant-bit.github.io/JIANT|the whole song or the section|T1..T6 + MIX, 16 bit 44.1 kHz");
+                "MarcoCasanova00.github.io/JIANT|the whole song or the section|T1..T6 + MIX, 16 bit 44.1 kHz");
     }
     /* ---- the fixes and the names */
     if (q == B(42, 0)) {

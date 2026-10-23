@@ -270,6 +270,17 @@ static const preset_t ANALOG_PRESETS[] = {
     {"DARK PAD", {0, 18, 64, 6, 38, 30, 10, -12}, {70, 95, 120, 100}, 12, TAG(PAD), FX(0, 55, 30, 75), PAT(5)},
     {"GLASS KEYS", {3, 8, 60, 0, 120, 0, 0, 19}, {0, 82, 20, 65}, 0, TAG(KEYS), FX(0, 35, 35, 50), PAT(6)},
     {"ORGAN SQR", {1, 4, 64, 0, 100, 0, 5, 12}, {0, 64, 127, 30}, 0, TAG(KEYS), FX(0, 35, 10, 35), PAT(6)},
+    /* (the tekno family: playable patches too, not only generator recipes. TRIBE: a plucky square; TEKK: SAW3
+     * through drive; PSY: a sustained saw; CORE 303: a resonant saw lead; TEKK STAB: a driven chord; PSY LEAD: a
+     * delayed saw; TEKNO: a straight bass; MENTAL RING: RING's inharmonic metal) */
+    {"TRIBE BASS", {1, 0, 0, 0, 52, 58, 18, 0}, {0, 55, 35, 30}, 38, 1 | TAG(BASS), FX(10, 0, 0, 0), PAT(2)},
+    {"TEKK BASS", {7, 10, 60, 0, 40, 42, 55, -12}, {0, 50, 25, 20}, 30, 1 | TAG(BASS), FX(20, 0, 0, 0), PAT(2)},
+    {"PSY BASS", {0, 8, 70, 0, 58, 40, 15, 0}, {0, 60, 50, 30}, 25, 1 | TAG(BASS), FX(0, 10, 10, 0), PAT(2)},
+    {"CORE 303", {0, 0, 0, 0, 38, 95, 35, 0}, {0, 45, 15, 25}, 55, 1 | TAG(LEAD), FX(25, 0, 20, 0), PAT(1)},
+    {"TEKK STAB", {7, 12, 65, 0, 60, 30, 45, 12}, {0, 40, 10, 30}, 20, TAG(PAD), FX(20, 25, 25, 30), PAT(13)},
+    {"PSY LEAD", {0, 9, 60, 0, 70, 35, 10, 0}, {2, 60, 85, 45}, 15, 1 | TAG(LEAD), FX(0, 30, 50, 40), PAT(4)},
+    {"TEKNO BASS", {0, 4, 64, 0, 48, 60, 25, 0}, {0, 50, 30, 20}, 35, 1 | TAG(BASS), FX(10, 0, 0, 0), PAT(2)},
+    {"MENTAL RING", {6, 40, 60, 0, 62, 55, 10, 0}, {0, 55, 20, 45}, 25, TAG(PLUCK), FX(10, 20, 30, 30), PAT(13)},
 };
 
 static const engine_t ENG_ANALOG = {

@@ -36,7 +36,7 @@ Si vas a leer un solo capítulo, leé [12. Guardar y cargar](#12-guardar-y-carga
 
 ### Instalación
 
-1. Abrí el **instalador web** en Chrome o Edge: <https://juanjiant-bit.github.io/JIANT/webapp/installer/>
+1. Abrí el **instalador web** en Chrome o Edge: <https://MarcoCasanova00.github.io/JIANT/webapp/installer/>
 2. Conectá el FM-1 **directamente** a la computadora con un cable USB de datos.
 3. **¿Venís de otro firmware custom (Felucca, baudgirl o cualquier otro)?** Volvé primero al firmware oficial V15
    con el botón **Return to official V15 first** del instalador (que además guarda un backup completo). Escribir
@@ -1447,8 +1447,9 @@ y la semilla).
 
 Los géneros: HOUSE, DEEP HOUSE, MICRO HOUSE, TECH HOUSE, ACID HOUSE, TECHNO, DETROIT, DUB TECHNO, HARD TECHNO,
 HYPNOTIC, TRANCE, ELECTRO, EBM, ITALO, SYNTH POP, DARKWAVE, POST PUNK, TRIBAL PUNK, MINIMAL SYNTH, MAN MACHINE,
-MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, BOOM BAP, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
-STEPPERS, JAZZ, BOSSA, AFROBEAT, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, BROKEN. Cada uno sabe su rango de
+MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, TRIBE TEKNO, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
+TEKNO, MENTAL TEKNO, ACID CORE, HARDTEKK, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, PSY TRANCE.
+Cada uno sabe su rango de
 tempo, sus escalas y progresiones, su mapa de batería y su kit, sus arquetipos de bajo y su registro, cómo hablan sus
 acordes, su arpegio y su lead, qué receta de sonido toma cada rol, qué tan humano toca y su espacio (tipo de reverb,
 tipo y tiempo del delay, cuánta humedad).
@@ -2442,13 +2443,13 @@ Probe (su prueba 7).
 
 Las tres funcionan en el navegador y se actualizan solas con cada cambio del firmware.
 
-### Emulador — <https://juanjiant-bit.github.io/JIANT/emu/>
+### Emulador — <https://MarcoCasanova00.github.io/JIANT/emu/>
 
 El mismo código que el FM-1, con sonido, en el navegador. Tocalo con el mouse o con el teclado de la computadora: las
 filas **Z–'** y **Q–O** son las teclas, **1** a **=** los botones de FX a REC, **[ ]** OCT− / OCT+, **↑ ↓** SELECT,
 **← →** ALGORITHM; **Shift-clic** mantiene un botón. Ideal para aprender las capas sin el equipo.
 
-### Instalador — <https://juanjiant-bit.github.io/JIANT/webapp/installer/>
+### Instalador — <https://MarcoCasanova00.github.io/JIANT/webapp/installer/>
 
 Chrome o Edge, con el FM-1 conectado directo a la computadora.
 
@@ -2459,7 +2460,7 @@ Chrome o Edge, con el FM-1 conectado directo a la computadora.
   baudgirl…), y siempre que quieras volver al firmware de fábrica. El V15 oficial no puede abrir música de JIANT; para
   restaurar el backup más adelante, reinstalá JIANT y usá el editor.
 
-### Editor — <https://juanjiant-bit.github.io/JIANT/webapp/editor/>
+### Editor — <https://MarcoCasanova00.github.io/JIANT/webapp/editor/>
 
 Todos los parámetros desde la computadora, por USB. Pestañas: Sound, 6-OP FM, Sequencer, Tracks, Library, Projects,
 Settings.
@@ -2486,7 +2487,7 @@ encanta.
 
 ### No me deja instalar: qué hacer
 
-Instalador: <https://juanjiant-bit.github.io/JIANT/webapp/installer/>
+Instalador: <https://MarcoCasanova00.github.io/JIANT/webapp/installer/>
 
 **Antes que nada:** si algo falla, el instalador muestra un recuadro **«Qué hacer»** con los pasos para ese error. Si
 con eso no alcanza, apretá **COPIAR INFORME** y pegá el texto en tu mensaje: dice qué navegador usás, qué puertos MIDI
@@ -2538,7 +2539,7 @@ probá otro cable directo a la computadora; si no vuelve, se recupera con
 [FM-1 Transporter](https://github.com/kurogedelic/FM-1-transporter).
 
 **«Page not found» / la página no existe.**
-Usá exactamente <https://juanjiant-bit.github.io/JIANT/webapp/installer/> (sin nada pegado al final). Los enlaces
+Usá exactamente <https://MarcoCasanova00.github.io/JIANT/webapp/installer/> (sin nada pegado al final). Los enlaces
 viejos (`/JIANT/installer/`, `/JIANT/webapp/`…) ahora te redirigen solos.
 
 **¿Qué versión elijo?**

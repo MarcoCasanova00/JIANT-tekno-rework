@@ -271,7 +271,7 @@ static void yt_beat(uint32_t q)
     if (q == B(31, 0)) {
         drums(BRK); go_title("SYSTEM");
         caption(q, "OPEN", "FREE FOR EVERYONE", "install it from the browser|no app, no account", 0,
-                "juanjiant-bit.github.io/JIANT|github.com/juanjiant-bit/JIANT");
+                "MarcoCasanova00.github.io/JIANT|github.com/juanjiant-bit/JIANT");
     }
     if (q == B(34, 0)) { drums(STOMP2); home(T_LEAD); caption(q, "", "", "", 0, ""); }
     if (q == B(38, 0)) { mute(T_DRUM, 1); mute(T_BRASS, 1); mute(T_ANVIL, 1); }

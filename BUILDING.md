@@ -103,7 +103,7 @@ does the same for the cost files.
 ## Install
 
 Use the web installer in Chrome or Edge:
-<https://juanjiant-bit.github.io/JIANT/webapp/installer/>. It installs the released package (the file names keep
+<https://MarcoCasanova00.github.io/JIANT/webapp/installer/>. It installs the released package (the file names keep
 Felucca's, `felucca.bin` / `felucca.fwsc`: JIANT is built on it).
 
 From the command line (needs `pip3 install mido python-rtmidi`):
