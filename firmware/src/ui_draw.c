@@ -1788,7 +1788,7 @@ static void draw_columns(void)
 #define SPL_WRITE 800u                              /* ms: the signature written (was 900; 0.6.51: 600 -> 800) */
 #define SPL_HOLD 900u                               /* .. then shown whole, before the UI (was 1100; 0.6.51: 500 -> 900) */
 #define SPL_SY 40                                   /* the signature's canvas on the screen (240 x SIG_H + 12) */
-#define SPL_TY 186                                  /* the two lines under it */
+#define SPL_TY 186                                  /* the three lines under it */
 static const char *const SPLASH_LINES[] = {FELUCCA_VERSION, "by Juan Jiant", "MarcoCasanova00 patch"};
 static uint8_t spl_anim;                            /* main.c: 1 = the signature to be written (splash_write) */
 static int32_t sig_seg(uint32_t i)                  /* segment i -> i + 1's length, px (0: a stroke starts at i + 1) */
@@ -1919,7 +1919,7 @@ static void draw_splash(void)
 {
     uint32_t k;
     lcd_fill(0, 0, 240, 240, T_BG);
-    cv_begin(240, 36, T_BG);
+    cv_begin(240, 48, T_BG);
     for (k = 0; k < 3u; k++)
         cv_text_in(0, (int32_t)k * 16, 240, &AF_S, SPLASH_LINES[k], k ? T_DIM : T_MID, T_BG);
     cv_blit(0, SPL_TY);
