@@ -1371,8 +1371,9 @@ turned leaves the drums and the lead as they were. The screen shows **LAST: HOUS
 
 The genres: HOUSE, DEEP HOUSE, MICRO HOUSE, TECH HOUSE, ACID HOUSE, TECHNO, DETROIT, DUB TECHNO, HARD TECHNO,
 HYPNOTIC, TRANCE, ELECTRO, EBM, ITALO, SYNTH POP, DARKWAVE, POST PUNK, TRIBAL PUNK, MINIMAL SYNTH, MAN MACHINE,
-MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, BOOM BAP, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
-STEPPERS, JAZZ, BOSSA, AFROBEAT, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, BROKEN. Each one knows its tempo
+MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, TRIBE TEKNO, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
+TEKNO, MENTAL TEKNO, ACID CORE, HARDTEKK, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, PSY TRANCE.
+Each one knows its tempo
 range, its scales and chord progressions, its drum map and kit, its bass archetypes and register, how its chords, arp
 and lead speak, which sound recipe each role takes, how human it plays and its space (reverb type, delay type and
 time, how wet).

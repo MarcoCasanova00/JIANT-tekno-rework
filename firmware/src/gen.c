@@ -1498,7 +1498,10 @@ static void gen_sound(track_t *t, uint32_t role, uint32_t ri)
     t->p[P_CHOR] = (int16_t)(r->chor[1] ? grr(r->chor[0], r->chor[1]) : 0);
     t->p[P_GLIDE] = (int16_t)(r->glide ? grr(r->glide - 10, r->glide + 10) : 0);
     t->p[P_VOICE] = (int16_t)r->voice;
-    t->p[P_DETUNE] = (int16_t)(ri == SR_REESE || ri == SR_WALL || ri == SR_HOOVER ? grr(30, 60) : t->p[P_DETUNE]);
+    t->p[P_DETUNE] = (int16_t)(ri == SR_REESE || ri == SR_WALL || ri == SR_HOOVER ||
+                                ri == SR_TRIBE_BASS || ri == SR_MENTAL_BASS || ri == SR_TEKK_BASS ||
+                                ri == SR_PSY_BASS || ri == SR_PSY_LEAD || ri == SR_TEKNO_BASS
+                                ? grr(30, 60) : t->p[P_DETUNE]);
     if (ri == SR_GTR || ri == SR_DRONE) {               /* (a tremolo: AUTO PAN on the beat) */
         t->p[P_APDEP] = (int16_t)grr(30, 60); t->p[P_APSYNC] = 1; t->p[P_APRATE] = (int16_t)grr(4, 6); t->p[P_APWAVE] = (int16_t)(ri == SR_GTR ? 3 : 0);
     }

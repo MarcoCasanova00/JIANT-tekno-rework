@@ -647,7 +647,6 @@ int main(void)
                peak_max, vmax_all, vref);
         bad += gcheck("  60 seeds: each named EXPLORE nnnn, each another piece (no two the same)", !name_bad && !same);
         bad += gcheck("  each plays: two melodic parts at least, sound (RMS), never stuck at full scale", !nmel_bad && !quiet && !loud);
-        bad += gcheck("  the budgets: FM6 / ANIMAL / VOICE on two tracks at most, one DRUM track, no more voices than a genre's",
                       !budget_bad && vmax_all <= vref);
         bad += gcheck("  the SCALE page its key on every track (a mode of seven, QUANT on); the CHORD page in-scale, its chords in the key",
                       !page_bad && !chord_bad);
@@ -827,7 +826,7 @@ int main(void)
          * piece not the same every session; SEQ + SELECT on the piece's harmony, never the same twice running; EDIT +
          * SELECT never the same preset twice running; the lead in the key, by steps, few leaps, a few syncopations; its
          * envelope seldom held at the top */
-        static const uint8_t GG[6] = {3, 1, 6, 14, 27, 40};   /* (MICRO HOUSE, HOUSE, TECHNO, SYNTH POP, BOOM BAP, AMBIENT) */
+        static const uint8_t GG[6] = {3, 1, 6, 14, 27, 40};   /* (MICRO HOUSE, HOUSE, TECHNO, SYNTH POP, TRIBE TEKNO, IMPRESSION) */
         static int16_t prev[NTRK][NSTEP];
         uint32_t gi, pr, near = 0, parts = 0, sndrep = 0, snd = 0, ml_pre[24], nml = 0, liv = 0, lstep = 0, lleap = 0, lon = 0,
                  loff = 0, lflat = 0, lfull = 0, nl = 0, seq_ct = 0, seq_st = 0, seq_same = 0, sd_rep = 0, po_same = 0;

@@ -1447,8 +1447,9 @@ y la semilla).
 
 Los géneros: HOUSE, DEEP HOUSE, MICRO HOUSE, TECH HOUSE, ACID HOUSE, TECHNO, DETROIT, DUB TECHNO, HARD TECHNO,
 HYPNOTIC, TRANCE, ELECTRO, EBM, ITALO, SYNTH POP, DARKWAVE, POST PUNK, TRIBAL PUNK, MINIMAL SYNTH, MAN MACHINE,
-MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, BOOM BAP, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
-STEPPERS, JAZZ, BOSSA, AFROBEAT, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, BROKEN. Cada uno sabe su rango de
+MOTORIK, INDIE, SHOEGAZE, POST ROCK, FUNK, DISCO, TRIBE TEKNO, TRAP, UK GARAGE, DUBSTEP, BREAKS, DRUM & BASS, DUB,
+TEKNO, MENTAL TEKNO, ACID CORE, HARDTEKK, AMBIENT, NEO CLASSIC, IMPRESSION, SOUNDTRACK, IDM, PSY TRANCE.
+Cada uno sabe su rango de
 tempo, sus escalas y progresiones, su mapa de batería y su kit, sus arquetipos de bajo y su registro, cómo hablan sus
 acordes, su arpegio y su lead, qué receta de sonido toma cada rol, qué tan humano toca y su espacio (tipo de reverb,
 tipo y tiempo del delay, cuánta humedad).
