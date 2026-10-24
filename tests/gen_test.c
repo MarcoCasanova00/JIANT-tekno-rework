@@ -984,6 +984,85 @@ int main(void)
         printf("gen:   drum rolls on their lanes: %u, steps with RATCH on a kit: %u\n", lrolls, stepr);
         bad += gcheck("GEN drums: rolls as the lanes' x2 / x4, no step RATCH on a kit", !stepr && lrolls > 0u);
     }
+    {   /* (TEKNO) the recipe is the envelope: on the six tekno rows the final release must sit in the dedicated
+         * recipe's own range, not at the role's 40 ms floor and not inside the generic lead / arp shape. FM6 keeps its
+         * release in the carriers' R4 (gen.c), so those tracks are skipped and counted separately. */
+        static const uint8_t GG[6] = {27u, 34u, 35u, 36u, 37u, 43u};   /* gp.genre: TRIBE .. PSY */
+        static const uint8_t MAXREL[6][4] = {                          /* BASS, PAD, LEAD, ARP; 0: no dedicated recipe */
+            {30u, 0u, 70u, 35u}, {30u, 40u, 70u, 35u}, {35u, 0u, 70u, 70u},
+            {32u, 40u, 32u, 35u}, {28u, 40u, 60u, 40u}, {35u, 0u, 60u, 50u}};
+        static const uint8_t ROLE[4] = {RL_BASS, RL_PAD, RL_LEAD, RL_ARP};
+        uint32_t x, sd, r, checked = 0, tested = 0, fm6 = 0, badrel = 0;
+        for (x = 0; x < 6u; x++)
+            for (sd = 0; sd < 8u; sd++) {
+                gen_with(GG[x], sd * 137u + 3u, 50u, 0u);
+                checked++;
+                for (r = 0; r < 4u; r++) {
+                    uint32_t t = gs.trk_of[ROLE[r]], rel;
+                    if (!MAXREL[x][r] || !gs.act[ROLE[r]] || t >= NTRK) continue;
+                    if (trk[t].eng_req == ENGI_FM6) { fm6++; continue; }
+                    rel = (uint32_t)trk[t].p[P_REL];
+                    tested++;
+                    if (rel < 24u || rel > MAXREL[x][r]) badrel++;
+                }
+            }
+        printf("gen:   tekno recipe releases: %u tested, %u FM6 (R4), %u outside\n", tested, fm6, badrel);
+        bad += gcheck("GEN tekno: dedicated recipes keep their envelope (release 24 .. recipe, 48 pieces)",
+                      checked == 48u && !badrel && tested >= 120u);
+    }
+    {   /* (TEKNO) articulation is not left to chance: each of the six basses carries at least two offbeat accents and
+         * one slide over its loop. Before the pass HARDTEKK and PSY had none at all, and a "303" line without a slide
+         * is only a square bass. */
+        static const uint8_t GG[6] = {27u, 34u, 35u, 36u, 37u, 43u};
+        uint32_t x, sd, badart = 0, notes = 0, accents = 0, slides = 0;
+        for (x = 0; x < 6u; x++)
+            for (sd = 0; sd < 8u; sd++) {
+                uint32_t bs, i, na = 0, sa = 0, sl = 0;
+                gen_with(GG[x], sd * 137u + 3u, 50u, 0u);
+                bs = gs.trk_of[RL_BASS];
+                if (!gs.act[RL_BASS] || bs >= NTRK) { badart++; continue; }
+                for (i = 0; i < dlen(&trk[bs]); i++) {
+                    if (trk[bs].step[i].time != ST_NOTE) continue;
+                    na++;
+                    sa += (trk[bs].step[i].flags & SF_ACCENT) != 0;
+                    sl += (trk[bs].step[i].flags & SF_SLIDE) != 0;
+                }
+                notes += na; accents += sa; slides += sl;
+                if (sa < 2u || sl < 1u) badart++;
+            }
+        printf("gen:   tekno bass articulation: %u notes, %u accents, %u slides, %u pieces short\n",
+               notes, accents, slides, badart);
+        bad += gcheck("GEN tekno: every bass has >=2 offbeat accents and >=1 slide (48 pieces)",
+                      !badart && slides >= 48u && accents >= 96u);
+    }
+    {   /* (TEKNO) the kick's relation to the bass is a genre decision, not the same default everywhere: the six rows
+         * use four named handovers; the downbeat is never empty and the four-on-floor skeleton is kept (ACID's last-bar
+         * fill and TRIBE's half-time throw are the two deliberate holes, under a fifth of the quarters). */
+        static const uint8_t GG[6] = {27u, 34u, 35u, 36u, 37u, 43u};
+        static const uint8_t MODE[6] = {KM_INTERLOCK, KM_DOUBLE, KM_SUSTAIN, KM_ANSWER, KM_DOUBLE, KM_SUSTAIN};
+        uint32_t x, sd, modes = 0, baddown = 0, badq = 0, q = 0, qk = 0, badmode = 0;
+        uint32_t gq[6] = {0}, gqk[6] = {0};
+        for (x = 0; x < 6u; x++)
+            for (sd = 0; sd < 8u; sd++) {
+                uint32_t dr, i, len;
+                gen_with(GG[x], sd * 137u + 3u, 50u, 0u);
+                if (GENRE[GG[x] - 1u].kick_mode != MODE[x]) badmode++;
+                modes |= 1u << GENRE[GG[x] - 1u].kick_mode;
+                dr = gs.trk_of[RL_DRUM];
+                if (!gs.act[RL_DRUM] || dr >= NTRK) { badq++; continue; }
+                len = dlen(&trk[dr]);
+                for (i = 0; i < len; i += 4u) {
+                    uint32_t kick = trk[dr].step[i].time == ST_NOTE && (trk[dr].step[i].hit & 1u);
+                    q++; gq[x]++;
+                    qk += kick; gqk[x] += kick;
+                    if (!(i % 16u) && !kick) baddown++;
+                }
+            }
+        printf("gen:   tekno kick: %u/%u quarters, %u empty downbeats, modes %u\n", qk, q, baddown, modes);
+        for (x = 0; x < 6u; x++) badq += gq[x] != 128u || gqk[x] * 100u < gq[x] * 87u;
+        bad += gcheck("GEN tekno: named kick / bass handovers (4 modes), downbeat and 4/4 skeleton",
+                      !badmode && !baddown && !badq && q == 768u && qk * 100u >= q * 94u && modes == 15u);
+    }
     printf(bad ? "gen: %d FAILED\n" : "gen: all passed\n", bad);
     return bad ? 1 : 0;
 }

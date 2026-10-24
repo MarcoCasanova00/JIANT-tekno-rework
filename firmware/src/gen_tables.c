@@ -376,6 +376,20 @@ static const grecipe_t RECIPE[SR_N] = {
     [SR_TEK_ARP]  = {{EG_A, EG_A, EG_PH}, {"ARP PLUCK", "PLUCK", "DIGI STAB"}, {0, 2}, {25, 45}, {0, 15}, {20, 35}, 0, {58, 82}, {20, 45}, {20, 40}, {0, 0}, {0, 0}, {0, 10}, {0, 12}, 0, V_POLY},
     [SR_PSY_ARP]  = {{EG_FM, EG_A, EG_PH}, {"FM PLUCK", "ARP PLUCK", "DIGI STAB"}, {0, 2}, {35, 55}, {5, 20}, {30, 50}, 0, {55, 80}, {25, 50}, {15, 35}, {0, 8}, {15, 45}, {0, 8}, {10, 25}, 0, V_POLY},
 };
+/* (TEKNO) the recipes whose envelope is the patch, not a role default: a 303's short decay, a mental siren's slow
+ * opening, a tribe bass's rebound. gen_sound leaves their ADSR alone (the generic lead / arp shaping does not write
+ * over it) and lets their release reach the recipe's own floor, still inside click-safe bounds. The general recipes
+ * keep the role shaping, and every other genre is untouched. */
+static int gtekno_genre(uint32_t gi)
+{
+    return gi == 26u || (gi >= 33u && gi <= 36u) || gi == 42u;
+}
+static int gtekno_voice(uint32_t ri)
+{
+    return ri == SR_TRIBE_BASS || ri == SR_MENTAL_BASS || ri == SR_MENTAL || ri == SR_ACIDCORE ||
+           ri == SR_TEKK_BASS || ri == SR_TEKK_STAB || ri == SR_PSY_BASS || ri == SR_PSY_LEAD ||
+           ri == SR_TEKNO_BASS || ri == SR_TEK_ARP || ri == SR_PSY_ARP;
+}
 /* (0.6.95) a throw its own: the neighbours a throw may take instead (the drum map's family, the chords' play, a role's
  * recipe), so two throws of a genre are not the same piece in another key */
 static const uint8_t DM_ALT[DM_NONE][2] = {
@@ -557,7 +571,7 @@ static const ggenre_t GENRE[] = {
      0, 1, 40, 0, FM_PARTS, 30, HF_JAZZY | HX_RAISE | HX_SEC | HX_LIFT},
     /* ---- tekno (TRIBE takes the old BOOM BAP slot in place: every genre after it keeps its number) */
     {"TRIBE TEKNO", 150, 168, 6, {SC_DOR, SC_PHRY, SC_MIN, SC_MPEN}, DM_TRIBE, 100, KIT_909, 1, HC_FUNK, FL_TOM, 1,
-     {BA_TRIBE, BA_BOUNCE, BA_PSY}, 33, KM_ANSWER, 45, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_QUART,
+     {BA_TRIBE, BA_BOUNCE, BA_PSY}, 33, KM_INTERLOCK, 45, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_QUART,
      {AP_BROKEN, AP_CYCLE3}, LD_HOOK, AMT(95, 90, 40, 30, 40), {KIT_909, SR_TRIBE_BASS, SR_STAB, SR_TEK_ARP, SR_MENTAL}, SR_NOISE,
      1, 2, 45, 0, FM_CLUB, 25, HF_LOOP},
     {"TRAP", 136, 146, 0, {SC_MIN, SC_PHRY, SC_HARM, SC_MIN}, DM_TRAP, 100, KIT_808, 0, HC_FLAT, FL_HAT, 0,
@@ -587,7 +601,7 @@ static const ggenre_t GENRE[] = {
      1, 4, 80, 0, FM_ARC, 40, HF_LOOP},
     /* ---- tekno (in the slots the dub, jazz and latin rows had: the genres after them keep their numbers) */
     {"TEKNO", 150, 180, 4, {SC_PHRY, SC_DOR, SC_MIN, SC_HARM}, DM_TEKNO, 100, KIT_909, 1, HC_MACHINE, FL_ROLL, 0,
-     {BA_ACID, BA_ROLL16, BA_PSY}, 33, KM_SUSTAIN, 50, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_PLANE,
+     {BA_ACID, BA_ROLL16, BA_PSY}, 33, KM_DOUBLE, 45, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_PLANE,
      {AP_PULSE, AP_SEQ}, LD_OSTINATO, AMT(95, 90, 30, 30, 30), {KIT_909, SR_TEKNO_BASS, SR_TEKK_STAB, SR_TEK_ARP, SR_MENTAL}, SR_NOISE,
      4, 4, 55, 0, FM_CLUB, 5, HF_LOOP},
     {"MENTAL TEKNO", 155, 180, 4, {SC_PHRY, SC_HARM, SC_MIN, SC_DOR}, DM_MENTAL, 100, KIT_909, 0, HC_MACHINE, FL_NONE, 0,
@@ -595,11 +609,11 @@ static const ggenre_t GENRE[] = {
      {AP_CYCLE3, AP_CYCLE5}, LD_OSTINATO, AMT(95, 85, 20, 35, 30), {KIT_909, SR_MENTAL_BASS, SR_PAD, SR_MENTAL, SR_MENTAL}, SR_TEXTURE,
      4, 4, 70, 0, FM_ARC, 0, HF_LOOP},
     {"ACID CORE", 160, 185, 0, {SC_PHRY, SC_MIN, SC_HARM, SC_BLUE}, DM_ACIDCORE, 100, KIT_909, 0, HC_MACHINE, FL_DROP, 0,
-     {BA_ACID, BA_ACIDCORE, BA_ROLL16}, 33, KM_SUSTAIN, 60, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_POWER,
-     {AP_PULSE, AP_SEQ}, LD_MECH, AMT(100, 100, 20, 20, 25), {KIT_909, SR_ACIDCORE, SR_TEKK_STAB, SR_ACIDCORE, SR_ACIDCORE}, SR_NOISE,
+     {BA_ACID, BA_ACIDCORE, BA_ROLL16}, 33, KM_ANSWER, 42, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_POWER,
+     {AP_PULSE, AP_SEQ}, LD_MECH, AMT(100, 100, 20, 20, 25), {KIT_909, SR_ACIDCORE, SR_TEKK_STAB, SR_TEK_ARP, SR_ACIDCORE}, SR_NOISE,
      1, 2, 30, 0, FM_CLUB, 0, HF_LOOP},
     {"HARDTEKK", 170, 190, 0, {SC_MIN, SC_PHRY, SC_HARM, SC_DOR}, DM_HARDTEKK, 100, KIT_INDUS, 0, HC_MACHINE, FL_KICK16, 0,
-     {BA_HARDTEKK, BA_PUMP8, BA_ROLL16}, 33, KM_SUSTAIN, 40, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_POWER,
+     {BA_HARDTEKK, BA_PUMP8, BA_ROLL16}, 33, KM_DOUBLE, 35, {PR_ONE, PR_PHRY, PR_I_VII}, 4, CS_STAB, VM_POWER,
      {AP_OCTAVES, AP_PULSE}, LD_SPARSE, AMT(100, 100, 20, 20, 25), {KIT_INDUS, SR_TEKK_BASS, SR_TEKK_STAB, SR_TEKK_STAB, SR_PSY_LEAD}, SR_NOISE,
      1, 1, 25, 0, FM_CLUB, 0, HF_LOOP},
     /* ---- the night, the room */

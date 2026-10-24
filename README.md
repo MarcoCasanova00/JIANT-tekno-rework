@@ -24,6 +24,9 @@ All original 43-genre count preserved — each new genre occupies a slot vacated
 - **6 new drum maps** with genre-specific kick patterns, hi-hats, percussion
 - **6 new bass archetypes** designed against the new kick rules
 
+### Generator core (second pass)
+The dedicated tekno recipes now keep their own envelopes instead of being overwritten by role defaults, the six rows use four distinct kick/bass handovers, and a deterministic articulation pass gives every tekno bass offbeat accents and at least one slide. Host regression tests cover final release values, articulation, kick modes and the four-on-the-floor skeleton. See [docs/TEKNO-REWORK.md](docs/TEKNO-REWORK.md) for the measured before/after, safety scope and rollback.
+
 ## Try It
 - **Browser Emulator**: [https://MarcoCasanova00.github.io/JIANT/emu/](https://marcocasanova00.github.io/JIANT-tekno-rework/)
 

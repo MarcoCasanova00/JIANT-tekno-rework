@@ -1413,7 +1413,7 @@ static void gen_sound(track_t *t, uint32_t role, uint32_t ri)
     t->p[P_DEC] = (int16_t)grr(r->dec[0], r->dec[1]);
     t->p[P_SUS] = (int16_t)grr(r->sus[0], r->sus[1]);
     t->p[P_REL] = (int16_t)grr(r->rel[0], r->rel[1]);
-    if ((role == RL_LEAD || role == RL_ARP) && r->sus[1] < 120u) {   /* (0.9.17, "too many leads with full sustain and
+    if ((role == RL_LEAD || role == RL_ARP) && r->sus[1] < 120u && !gtekno_voice(ri)) {   /* (0.9.17, "too many leads with full sustain and
                                                          * no release") a lead's or an arp's envelope a shape of its own:
                                                          * plucked (a real decay to a sustain well under the top, a short
                                                          * release), swelling (a slow attack), held with a tail; the
@@ -1427,10 +1427,13 @@ static void gen_sound(track_t *t, uint32_t role, uint32_t ri)
         }
     }
     {   /* (0.9.17) the release inside the tempo: a plucked or short part's tail three sixteenths at most at the genre's
-         * tempo (a pad's, a texture's: as long as they are), never under the role's floor */
+         * tempo (a pad's, a texture's: as long as they are), never under the role's floor. (TEKNO) a dedicated recipe
+         * keeps its shorter floor: an acid bass or a tekk stab that the role's 18 ms floor rounded up lost the gesture,
+         * while 24 keeps the envelope well clear of a click. */
         uint32_t ms10 = 3u * 150000u / ((gs.g->bpm_lo + gs.g->bpm_hi) / 2u + 1u), v = (uint32_t)t->p[P_REL];
-        if (role != RL_PAD && role != RL_TEX && t->p[P_SUS] < 100) while (v > GREL[role][0] && TIME_MS_X10[v] > ms10) v--;
-        t->p[P_REL] = (int16_t)clamp((int32_t)v, GREL[role][0], GREL[role][1]);   /* (0.9.13: never dry) */
+        uint32_t floor = gtekno_voice(ri) ? 24u : GREL[role][0];
+        if (role != RL_PAD && role != RL_TEX && t->p[P_SUS] < 100) while (v > floor && TIME_MS_X10[v] > ms10) v--;
+        t->p[P_REL] = (int16_t)clamp((int32_t)v, floor, GREL[role][1]);   /* (0.9.13: never dry) */
     }
     if (e == ENGI_FM6) {                                /* (0.9.14) FM6: its carriers' R4 left at 40 at least (~4 s at the
                                                          * most; eng_fm6.c fm6_rel_r4), not 1 (minutes: every chord rang on) */
@@ -2124,6 +2127,65 @@ static void gx_fit_piece(void)
 }
 
 /* --------------------------------------------------------------------------------------------- the piece --- */
+/* (TEKNO) the six tekno-family rows (TRIBE 26, TEKNO 33 .. HARDTEKK 36, PSY 42). Their own voice, never an EXPLORE
+ * piece and never a mutant: those keep every rule broken. */
+static int gtekno_piece(void)
+{
+    return !gx.on && !gs.mutant && gtekno_genre(gs.gi);
+}
+/* the articulation pass' own stream: seeded from the piece, so turning one part's knob cannot move another part's
+ * accents, and the generator's own stream (the form, the tempo, the macros after it) stays exactly as it was */
+static uint32_t gtk;
+static uint32_t gtk_rnd(void) { gtk ^= gtk << 13; gtk ^= gtk >> 17; gtk ^= gtk << 5; return gtk; }
+static void gtekno_artic(uint32_t bs)
+{
+    track_t *b;
+    uint32_t len, i, slides = 0, accents = 0, want, start;
+    if (bs >= NTRK || !gs.act[RL_BASS]) return;
+    b = &trk[bs]; len = dlen(b);
+    if (len < 4u) return;
+    gtk = ((uint32_t)gp.seed + 1u) * 0x9E3779B9u ^ (gs.gi + 1u) * 0x85EBCA6Bu ^ 0xA341316Cu;
+    if (!gtk) gtk = 1;
+    for (i = 0; i < len; i++) {
+        if (b->step[i].time != ST_NOTE) continue;
+        slides += (b->step[i].flags & SF_SLIDE) != 0;
+        accents += (b->step[i].flags & SF_ACCENT) != 0;
+    }
+    if (!slides) {                                      /* one or two hinges into a following note: a 303 line that
+                                                         * never slides is only a square bass. The kick's own step is
+                                                         * left alone now and then so the one keeps its weight. */
+        want = 1u + gtk_rnd() % 2u;
+        start = gtk_rnd() % len;
+        for (i = 0; want && i < len; i++) {
+            uint32_t p = (start + i * 5u) % len, q = p + 1u;
+            while (q < len && b->step[q].time == ST_TIE) q++;   /* (a tie between: the note still leads to the next) */
+            if (b->step[p].time != ST_NOTE || q >= len || b->step[q].time != ST_NOTE) continue;
+            if (!(p % 4u) && (gtk_rnd() & 1u)) continue;
+            b->step[p].flags |= SF_SLIDE;
+            want--;
+        }
+    }
+    if (accents < 2u) {                                 /* two offbeat accents: the kick keeps the downbeat, the bass
+                                                         * leans against it */
+        want = 2u - accents;
+        start = gtk_rnd() % len;
+        for (i = 0; want && i < len; i++) {
+            uint32_t p = (start + i * 3u) % len;
+            if (b->step[p].time != ST_NOTE || (b->step[p].flags & SF_ACCENT) || !(p % 4u)) continue;
+            b->step[p].flags |= SF_ACCENT;
+            want--;
+        }
+    }
+    if (gs.gi == 34u) {                                 /* (MENTAL) one tail into the room: held to the next step,
+                                                         * never over a chord change or a kick */
+        for (i = 0; i + 1u < len; i++) {
+            uint32_t q = i + 1u;
+            if (b->step[i].time != ST_NOTE || b->step[q].time != ST_REST || GKICK(q) || gchord_starts(q)) continue;
+            dhold(b, i, 1u, len);
+            break;
+        }
+    }
+}
 static void gen_post(void)
 {
     uint32_t dr = gs.trk_of[RL_DRUM], bs = gs.trk_of[RL_BASS], i, k;
@@ -2174,6 +2236,7 @@ static void gen_post(void)
         }
     }
     if (gx.on) gx_comps();                              /* (0.8.6) EXPLORE: wilder ones, on the bass too */
+    if (gtekno_piece()) gtekno_artic(bs);               /* (TEKNO) the bass' accent / slide grammar after the notes */
 }
 /* (0.8.3) the piece's key on the SCALE page, every track (the keys, CHORD, ALL TR and the RESO reverb with it), QUANT
  * SNAP unless one is chosen (the keys play in the key); the CHORD page on the chord track as its chords are (TRIAD, 7TH,
@@ -2361,7 +2424,12 @@ static void gen_make(void)
         /* (0.6.95) a throw its own: the drums from the map's family, the chords' play and a role's recipe from the neighbours */
         if (gmut.drum < DM_NONE && gmut.drum != DM_IDM && gch(35)) gmut.drum = DM_ALT[gmut.drum][gr() % 2u];
         if (gmut.pads <= CS_TRANCE && gch(35)) gmut.pads = CS_ALT[gmut.pads][gr() % 2u];
-        for (k = 1; k < GP_N; k++) if (gmut.snd[k] < SR_N && gch(30)) gmut.snd[k] = SR_ALT[gmut.snd[k]][gr() % 2u];
+        /* (TEKNO) the six tekno rows keep their own recipes: a throw that swapped a 303 for a rock bass broke the envelope
+         * agreement between the recipe and the performance (the very thing this rework is about). The neighbours still
+         * move the drums, the chords' play and every other genre's recipes. */
+        for (k = 1; k < GP_N; k++)
+            if (gmut.snd[k] < SR_N && gch(30) && (gs.mutant || !gtekno_genre(gs.gi)))
+                gmut.snd[k] = SR_ALT[gmut.snd[k]][gr() % 2u];
         g = gs.g = &gmut;
     }
     gen_pick();
