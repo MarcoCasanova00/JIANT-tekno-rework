@@ -1,6 +1,6 @@
-**Yes—the earlier answer needed more compositional theory and practical production detail. And the JIANT work should be a selective rework, not a replacement of the instrument:** your fork already contains genre-specific recipes and bass patterns worth refining rather than rebuilding. See [`gen_tables.c`](https://github.com/MarcoCasanova00/JIANT-tekno-rework/blob/main/firmware/src/gen_tables.c).
 
-I reviewed accessible **r/Tekno production discussions**, not a complete subreddit scrape. The useful evidence includes actual sampling workflows and arrangement discussions; mastering prescriptions conflict, so those should not become firmware rules.[1][2][3]
+
+
 
 ## What the theory should cover
 
