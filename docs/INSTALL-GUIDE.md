@@ -109,7 +109,7 @@ Open: `http://localhost:8790/`
    ```
 2. Open in Chrome/Edge: `http://localhost:8000/webapp/installer/`
 3. Select **"dev"** in the Version dropdown.
-4. Verify the package shows: **569,572 B** image size.
+4. Verify the package shows: **570,392 B** image size.
 5. Click **"Install"**.
 6. **Do NOT unplug the USB cable** until the installer reports completion (≈2-3 minutes).
 7. When done, click **"Done"** (if shown).
@@ -165,7 +165,7 @@ If the device does not respond after a failed flash:
 - ✅ Using Chrome or Edge browser
 - ✅ Using a data USB cable (not charge-only)
 - ✅ Device shows HOME screen before flashing
-- ✅ Installer shows 569,572 B image size before clicking Install
+- ✅ Installer shows 570,392 B image size before clicking Install
 - ✅ Not unplugging USB during flashing
 
 ---
